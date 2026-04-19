@@ -1,0 +1,25 @@
+{
+  "token_hmac_secret_key": "{{.Env.CENTRIFUGO_TOKEN_SECRET}}",
+  "api_key": "{{.Env.CENTRIFUGO_API_KEY}}",
+  "health": true,
+  "allowed_origins": ["*"],
+  "presence": true,
+  "history_size": 100,
+  "history_ttl": "24h",
+  "namespaces": [
+    {
+      "name": "messaging",
+      "presence": true,
+      "history_size": 100,
+      "history_ttl": "24h",
+      "publish": true,
+      "subscribe": true
+    },
+    {
+      "name": "notifications",
+      "presence": true,
+      "publish": true,
+      "subscribe": true
+    }
+  ]
+}

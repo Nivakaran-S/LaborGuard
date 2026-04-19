@@ -1,0 +1,72 @@
+config:
+  target: "http://localhost:5003"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 15
+      name: "Load test"
+    - duration: 30
+      arrivalRate: 30
+      name: "Stress test"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer {{ $env.LOAD_TEST_TOKEN }}"
+
+scenarios:
+  - name: "Get My Complaints"
+    weight: 40
+    flow:
+      - get:
+          url: "/api/complaints/my"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+
+  - name: "File Complaint"
+    weight: 20
+    flow:
+      - post:
+          url: "/api/complaints"
+          json:
+            title: "Performance test complaint {{ $randomString() }}"
+            description: "This is an automated load test complaint to validate API performance under concurrent load."
+            category: "wage_theft"
+            employerName: "Test Employer Corp"
+          expect:
+            - statusCode:
+                - 201
+                - 400
+                - 401
+
+  - name: "Get Complaint Stats"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/complaints/stats"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+                - 403   # non-admin/lawyer roles get 403
+
+  - name: "Get My Appointments"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/appointments/my"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+
+  - name: "Health Check"
+    weight: 10
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200

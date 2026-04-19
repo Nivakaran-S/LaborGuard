@@ -1,0 +1,47 @@
+{
+  "welcome": "Welcome to LaborGuard",
+  "login": "Login",
+  "register": "Register",
+  "home": "Home",
+  "jobs": "Job Board",
+  "community": "Community",
+  "messages": "Messages",
+  "notifications": "Notifications",
+  "profile": "Profile",
+  "logout": "Logout",
+  "dashboard": "Dashboard",
+  "my_complaints": "My Complaints",
+  "file_complaint": "File a Complaint",
+  "my_appointments": "My Appointments",
+  "roles": {
+    "worker": "Worker",
+    "employer": "Employer",
+    "lawyer": "Legal Officer",
+    "ngo": "NGO Representative",
+    "admin": "Administrator"
+  },
+  "auth": {
+    "email": "Email Address",
+    "phone": "Phone Number",
+    "password": "Password",
+    "confirm_password": "Confirm Password",
+    "first_name": "First Name",
+    "last_name": "Last Name",
+    "sign_in": "Sign In",
+    "join_platform": "Join Platform",
+    "forgot_password": "Forgot Password?",
+    "no_account": "Don't have an account?",
+    "has_account": "Already have an account?"
+  },
+  "complaint": {
+    "title": "Title",
+    "description": "Description",
+    "category": "Category",
+    "priority": "Priority",
+    "status": "Status",
+    "pending": "Pending",
+    "under_review": "Under Review",
+    "resolved": "Resolved",
+    "rejected": "Rejected"
+  }
+}

@@ -1,0 +1,499 @@
+openapi: 3.0.3
+info:
+  title: LaborGuard Auth Service API
+  description: Authentication and Identity Service for LaborGuard
+  version: 1.0.0
+servers:
+  - url: http://localhost:5001
+tags:
+  - name: Auth
+    description: Authentication endpoints
+  - name: Users
+    description: User profile management
+  - name: Admin
+    description: Admin user management
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [firstName, lastName, birthDate, email, phone, password, role]
+              properties:
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                birthDate:
+                  type: string
+                  format: date
+                email:
+                  type: string
+                  format: email
+                phone:
+                  type: string
+                  example: "+94712345678"
+                password:
+                  type: string
+                  minLength: 8
+                  description: "Must be min 8 chars, contain 1 uppercase, 1 lowercase, 1 number, and 1 special character (!@#$%^&*)."
+                confirmPassword:
+                  type: string
+                  description: "Must match the password field above."
+                role:
+                  type: string
+                  enum: [worker, lawyer, ngo, employer, admin]
+                documents:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Up to 5 verification documents
+      responses:
+        "201":
+          description: User registered successfully
+        "400":
+          description: Validation error
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Login successful
+        "401":
+          description: Invalid credentials
+
+  /api/auth/verify:
+    post:
+      tags: [Auth]
+      summary: Verify user account with code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, code, type]
+              properties:
+                userId:
+                  type: string
+                code:
+                  type: string
+                type:
+                  type: string
+                  enum: [email, phone]
+      responses:
+        "200":
+          description: Verification successful
+        "400":
+          description: Invalid or expired code
+
+  /api/auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request a password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Password reset code sent
+
+  /api/auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password with code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, newPassword]
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        "200":
+          description: Password reset successful
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: New access token issued
+        "400":
+          description: Refresh token is required
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: Logged out successfully
+
+  /api/auth/resend-verification:
+    post:
+      tags: [Auth]
+      summary: Resend verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Verification code resent
+
+  /api/auth/documents/{filename}:
+    get:
+      tags: [Auth]
+      summary: Retrieve a document from GridFS
+      parameters:
+        - in: path
+          name: filename
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Document retrieved
+        "404":
+          description: Document not found
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current authenticated user profile
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User profile data
+        "401":
+          description: Unauthorized
+    patch:
+      tags: [Auth]
+      summary: Update current authenticated user profile
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                profileImage:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Profile updated
+
+  /api/auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change password (authenticated)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        "200":
+          description: Password changed successfully
+        "401":
+          description: Unauthorized
+
+  /api/auth/google:
+    get:
+      tags: [Auth]
+      summary: Initiate Google OAuth login
+      responses:
+        "302":
+          description: Redirects to Google OAuth consent screen
+
+  /api/auth/google/callback:
+    get:
+      tags: [Auth]
+      summary: Google OAuth callback
+      responses:
+        "200":
+          description: Google authentication successful
+        "302":
+          description: Redirects on failure
+
+  /api/users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User profile data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "401":
+          description: Unauthorized
+        "404":
+          description: User not found
+    put:
+      tags: [Users]
+      summary: Update current user profile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                profile:
+                  type: object
+                  properties:
+                    occupation:
+                      type: string
+                    location:
+                      type: string
+                    preferredLanguage:
+                      type: string
+                      enum: [en, si, ta]
+      responses:
+        "200":
+          description: Profile updated successfully
+        "401":
+          description: Unauthorized
+
+  /api/admin/users:
+    get:
+      tags: [Admin]
+      summary: Get all users (admin only)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of all users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+
+  /api/admin/users/{id}/role:
+    put:
+      tags: [Admin]
+      summary: Update user role
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [worker, lawyer, ngo, employer, admin]
+      responses:
+        "200":
+          description: Role updated successfully
+        "403":
+          description: Forbidden
+
+  /api/admin/users/{id}/approve:
+    put:
+      tags: [Admin]
+      summary: Approve a user
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User approved
+
+  /api/admin/users/{id}/status:
+    put:
+      tags: [Admin]
+      summary: Activate or deactivate a user
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [isActive]
+              properties:
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: User status updated
+
+  /api/admin/users/{id}:
+    delete:
+      tags: [Admin]
+      summary: Delete a user
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User deleted
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [worker, lawyer, ngo, employer, admin]
+        isEmailVerified:
+          type: boolean
+        isPhoneVerified:
+          type: boolean
+        profile:
+          type: object
+          properties:
+            occupation:
+              type: string
+            location:
+              type: string
+            preferredLanguage:
+              type: string
+              enum: [en, si, ta]
+        isActive:
+          type: boolean
+        lastLogin:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

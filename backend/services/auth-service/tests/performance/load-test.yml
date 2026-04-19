@@ -1,0 +1,75 @@
+config:
+  target: "http://localhost:5001"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 20
+      name: "Load test"
+    - duration: 30
+      arrivalRate: 50
+      name: "Stress test"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - name: "User Registration"
+    weight: 20
+    flow:
+      - post:
+          url: "/api/auth/register"
+          json:
+            name: "Test User {{ $randomString() }}"
+            email: "testuser_{{ $randomString() }}@example.com"
+            password: "TestPass123!"
+            role: "worker"
+          expect:
+            - statusCode:
+                - 201
+                - 400   # duplicate email is expected under load
+
+  - name: "User Login"
+    weight: 50
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "loadtest@example.com"
+            password: "TestPass123!"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+          expect:
+            - statusCode:
+                - 200
+                - 401   # wrong credentials — expected in load test
+
+  - name: "Get Profile (Authenticated)"
+    weight: 30
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "loadtest@example.com"
+            password: "TestPass123!"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+      - get:
+          url: "/api/users/me"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+
+  - name: "Health Check"
+    weight: 10
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200

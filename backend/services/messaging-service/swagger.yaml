@@ -1,0 +1,180 @@
+openapi: 3.0.3
+info:
+  title: LaborGuard Messaging Service API
+  description: Actor-to-Actor Messaging Service for LaborGuard
+  version: 1.0.0
+servers:
+  - url: http://localhost:3005
+tags:
+  - name: Conversations
+    description: Conversation management
+  - name: Messages
+    description: Message management
+
+paths:
+  /api/conversations:
+    post:
+      tags: [Conversations]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [participants]
+              properties:
+                participants:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 2
+                participantRoles:
+                  type: array
+                  items:
+                    type: string
+                isGroup:
+                  type: boolean
+                  default: false
+                groupName:
+                  type: string
+      responses:
+        "201":
+          description: Conversation created
+        "200":
+          description: Existing 1-on-1 conversation returned
+        "400":
+          description: At least 2 participants required
+
+  /api/conversations/{userId}:
+    get:
+      tags: [Conversations]
+      summary: Get conversations for a user
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of conversations
+
+  /api/messages/{conversationId}:
+    get:
+      tags: [Messages]
+      summary: Get messages in a conversation
+      parameters:
+        - in: path
+          name: conversationId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: List of messages
+        "404":
+          description: Conversation not found
+
+  /api/messages:
+    post:
+      tags: [Messages]
+      summary: Send a message
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [conversationId, senderId]
+              properties:
+                conversationId:
+                  type: string
+                senderId:
+                  type: string
+                content:
+                  type: string
+                media:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "201":
+          description: Message sent
+        "400":
+          description: Missing required fields
+        "404":
+          description: Conversation not found
+
+  /api/messages/{conversationId}/read:
+    patch:
+      tags: [Messages]
+      summary: Mark messages as read
+      parameters:
+        - in: path
+          name: conversationId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+      responses:
+        "200":
+          description: Messages marked as read
+
+  /api/messages/{messageId}:
+    delete:
+      tags: [Messages]
+      summary: Delete a message
+      parameters:
+        - in: path
+          name: messageId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [senderId]
+              properties:
+                senderId:
+                  type: string
+      responses:
+        "200":
+          description: Message deleted
+        "403":
+          description: Can only delete own messages
+        "404":
+          description: Message not found

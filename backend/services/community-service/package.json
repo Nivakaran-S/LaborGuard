@@ -1,0 +1,34 @@
+{
+    "name": "community-service",
+    "version": "1.0.0",
+    "description": "Community Management Service for LaborGuard",
+    "main": "src/index.js",
+    "scripts": {
+        "start": "node src/index.js",
+        "dev": "nodemon src/index.js",
+        "test": "jest"
+    },
+    "dependencies": {
+        "@tensorflow/tfjs": "^4.22.0",
+        "axios": "^1.13.5",
+        "buffer": "^6.0.3",
+        "cloudinary": "^2.9.0",
+        "cors": "^2.8.5",
+        "dotenv": "^16.6.1",
+        "express": "^4.18.2",
+        "helmet": "^8.1.0",
+        "jpeg-js": "^0.4.4",
+        "jsonwebtoken": "^9.0.3",
+        "kafkajs": "^2.2.4",
+        "mongoose": "^8.0.0",
+        "multer": "^2.0.2",
+        "nsfwjs": "^4.2.1",
+        "pngjs": "^7.0.0",
+        "swagger-ui-express": "^5.0.1",
+        "yamljs": "^0.3.0"
+    },
+    "devDependencies": {
+        "jest": "^30.2.0",
+        "nodemon": "^3.0.1"
+    }
+}

@@ -1,0 +1,243 @@
+openapi: 3.0.3
+info:
+  title: LaborGuard Job Service API
+  description: Job Management Service for LaborGuard
+  version: 1.0.0
+servers:
+  - url: http://localhost:5003
+tags:
+  - name: Jobs
+    description: Job posting management
+  - name: Applications
+    description: Job application management
+
+paths:
+  /api/jobs:
+    get:
+      tags: [Jobs]
+      summary: Get all jobs
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [open, closed, filled, pending_review]
+        - in: query
+          name: employerId
+          schema:
+            type: string
+        - in: query
+          name: jobType
+          schema:
+            type: string
+            enum: [full-time, part-time, contract, temporary, freelance]
+      responses:
+        "200":
+          description: List of jobs
+    post:
+      tags: [Jobs]
+      summary: Create a new job posting
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, description, wage, location, jobType]
+              properties:
+                title:
+                  type: string
+                  maxLength: 100
+                description:
+                  type: string
+                  maxLength: 1000
+                wage:
+                  type: object
+                  required: [amount, frequency]
+                  properties:
+                    amount:
+                      type: number
+                      minimum: 0
+                    currency:
+                      type: string
+                      default: USD
+                    frequency:
+                      type: string
+                      enum: [hourly, daily, weekly, monthly, yearly, per-task]
+                compliesWithMinimumWage:
+                  type: boolean
+                location:
+                  type: object
+                  required: [address, city]
+                  properties:
+                    address:
+                      type: string
+                    city:
+                      type: string
+                    state:
+                      type: string
+                    country:
+                      type: string
+                      default: USA
+                jobType:
+                  type: string
+                  enum: [full-time, part-time, contract, temporary, freelance]
+      responses:
+        "201":
+          description: Job created
+        "401":
+          description: Unauthorized
+
+  /api/jobs/{id}:
+    get:
+      tags: [Jobs]
+      summary: Get a single job by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job details
+        "404":
+          description: Job not found
+    put:
+      tags: [Jobs]
+      summary: Update a job
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                wage:
+                  type: object
+                  properties:
+                    amount:
+                      type: number
+                    currency:
+                      type: string
+                    frequency:
+                      type: string
+                status:
+                  type: string
+                  enum: [open, closed, filled, pending_review]
+      responses:
+        "200":
+          description: Job updated
+        "403":
+          description: Not authorized
+        "404":
+          description: Job not found
+    delete:
+      tags: [Jobs]
+      summary: Delete a job
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job removed
+        "403":
+          description: Not authorized
+        "404":
+          description: Job not found
+
+  /api/jobs/my-applications:
+    get:
+      tags: [Applications]
+      summary: Get all applications submitted by the current worker
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of user's applications
+
+  /api/jobs/{id}/applications:
+    get:
+      tags: [Applications]
+      summary: Get all applications for a specific job (Employer only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of job applications
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [workerExperience]
+              properties:
+                workerExperience:
+                  type: string
+                additionalDetails:
+                  type: string
+      responses:
+        "201":
+          description: Application submitted successfully
+
+  /api/jobs/applications/{appId}/status:
+    put:
+      tags: [Applications]
+      summary: Update application status (Employer only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: appId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [pending, accepted, rejected]
+      responses:
+        "200":
+          description: Application status updated
+
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

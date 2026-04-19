@@ -1,0 +1,74 @@
+config:
+  target: "http://localhost:5002"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 20
+      name: "Load test"
+    - duration: 30
+      arrivalRate: 40
+      name: "Stress test"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer {{ $env.LOAD_TEST_TOKEN }}"
+
+scenarios:
+  - name: "Fetch Community Feed"
+    weight: 40
+    flow:
+      - get:
+          url: "/api/posts/feed"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+
+  - name: "Create Post"
+    weight: 20
+    flow:
+      - post:
+          url: "/api/posts"
+          json:
+            content: "Performance test post {{ $randomString() }}"
+            category: "general"
+          expect:
+            - statusCode:
+                - 201
+                - 401
+
+  - name: "Like a Post"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/posts/feed"
+          capture:
+            - json: "$.posts[0]._id"
+              as: "postId"
+      - post:
+          url: "/api/posts/{{ postId }}/like"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+                - 404
+
+  - name: "Get Statuses"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/statuses"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+
+  - name: "Health Check"
+    weight: 10
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200

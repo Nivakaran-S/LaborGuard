@@ -1,0 +1,152 @@
+openapi: 3.0.3
+info:
+  title: LaborGuard Notification Service API
+  description: Notification Service for LaborGuard
+  version: 1.0.0
+servers:
+  - url: http://localhost:3004
+tags:
+  - name: Notifications
+    description: Notification management
+  - name: System
+    description: System endpoints
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      tags: [System]
+      responses:
+        '200':
+          description: Service is healthy
+  /:
+    get:
+      summary: Root endpoint
+      tags: [System]
+      responses:
+        '200':
+          description: Service information
+
+  /api/notifications:
+    post:
+      tags: [Notifications]
+      summary: Create a notification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, title, body]
+              properties:
+                userId:
+                  type: string
+                type:
+                  type: string
+                  default: system
+                title:
+                  type: string
+                body:
+                  type: string
+                relatedId:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                  description: If provided, sends an email notification
+      responses:
+        "201":
+          description: Notification created
+        "400":
+          description: Missing required fields
+
+  /api/notifications/{userId}:
+    get:
+      tags: [Notifications]
+      summary: Get notifications for a user
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of notifications
+
+  /api/notifications/{userId}/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Get unread notification count
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  unreadCount:
+                    type: integer
+
+  /api/notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Mark a notification as read
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Notification marked as read
+        "404":
+          description: Notification not found
+
+  /api/notifications/{userId}/read-all:
+    patch:
+      tags: [Notifications]
+      summary: Mark all notifications as read
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: All notifications marked as read
+
+  /api/notifications/{id}:
+    delete:
+      tags: [Notifications]
+      summary: Delete a notification
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Notification deleted
+        "404":
+          description: Notification not found

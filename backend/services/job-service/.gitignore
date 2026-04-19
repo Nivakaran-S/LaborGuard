@@ -1,0 +1,15 @@
+# FIX: node_modules was committed to this service's repo.
+# This .gitignore already existed with these entries but was not applied
+# before the initial commit. After removing node_modules from tracking
+# (git rm -r --cached node_modules), this file will correctly ignore it.
+.env
+node_modules/
+dist/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store

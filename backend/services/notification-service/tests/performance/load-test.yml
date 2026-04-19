@@ -1,0 +1,55 @@
+config:
+  target: "http://localhost:5004"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 25
+      name: "Load test"
+    - duration: 30
+      arrivalRate: 50
+      name: "Stress test"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer {{ $env.LOAD_TEST_TOKEN }}"
+
+scenarios:
+  - name: "Get Notifications"
+    weight: 50
+    flow:
+      - get:
+          url: "/api/notifications"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+
+  - name: "Get Unread Count"
+    weight: 30
+    flow:
+      - get:
+          url: "/api/notifications/unread-count"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+
+  - name: "Mark All As Read"
+    weight: 10
+    flow:
+      - patch:
+          url: "/api/notifications/read-all"
+          expect:
+            - statusCode:
+                - 200
+                - 401
+
+  - name: "Health Check"
+    weight: 10
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200

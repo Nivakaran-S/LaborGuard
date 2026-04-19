@@ -1,0 +1,214 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+
+  /* FIX: Was dark navy (222.2 47.4% 11.2%) making ALL buttons appear black. Changed to teal. */
+  --primary: 173 98% 22%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 173 98% 22%;
+  --radius: 0.5rem;
+
+  --accent-primary: #01696f;
+  --accent-hover: #0c4e54;
+  --accent-danger: #e53e3e;
+  --text-primary: #1a202c;
+  --text-secondary: #718096;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7fafc;
+}
+
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 173 70% 45%;
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 173 70% 45%;
+}
+
+@layer base {
+  body {
+    @apply font-sans leading-relaxed min-h-screen flex flex-col bg-background text-foreground;
+  }
+  #root {
+    @apply flex flex-col min-h-screen w-full;
+  }
+  a {
+    @apply font-medium transition-colors duration-200;
+  }
+  h1, h2, h3, h4, .text-heading {
+    @apply font-bold mb-4;
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  .glass-container {
+    @apply bg-white border border-slate-200/80 rounded-2xl p-10 shadow-sm transition-shadow duration-300;
+  }
+
+  .modern-input {
+    @apply w-full px-5 py-3.5 bg-slate-50 border border-black/5 text-slate-800 rounded-xl
+           font-sans text-base font-medium transition-all duration-300
+           focus:outline-none focus:bg-white;
+  }
+  .modern-input:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 4px hsl(var(--primary) / 0.12);
+  }
+
+  .modern-select {
+    @apply w-full px-5 py-3.5 bg-slate-50 border border-black/5 text-slate-800 rounded-xl
+           font-sans text-base cursor-pointer transition-all duration-300 appearance-none
+           focus:outline-none focus:bg-white;
+  }
+  .modern-select:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 4px hsl(var(--primary) / 0.12);
+  }
+
+  .btn-primary {
+    @apply bg-primary text-primary-foreground border-none py-3.5 px-8 rounded-full
+           font-sans text-base font-semibold cursor-pointer transition-all duration-300
+           w-full flex justify-center items-center gap-2
+           hover:opacity-90 hover:-translate-y-0.5
+           active:translate-y-0
+           disabled:opacity-60 disabled:cursor-not-allowed disabled:pointer-events-none;
+    box-shadow: 0 4px 15px hsl(var(--primary) / 0.25);
+  }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 6px 20px hsl(var(--primary) / 0.35);
+  }
+
+  .btn-google {
+    @apply bg-white text-slate-800 border border-black/10 py-3.5 px-8 rounded-full
+           font-sans text-base font-semibold cursor-pointer transition-all duration-300
+           w-full flex justify-center items-center gap-3 shadow-sm
+           hover:bg-slate-50 hover:border-black/20 hover:-translate-y-0.5 hover:shadow-md;
+  }
+
+  .auth-wrapper {
+    @apply flex items-center justify-center min-h-[calc(100vh-74px)] w-full p-8;
+  }
+
+  /* FIX: No longer relies on missing auth-bg.jpg file. Uses a gradient fallback. */
+  .auth-wrapper.register-bg,
+  .auth-wrapper.login-bg {
+    background: linear-gradient(135deg, #0f172a 0%, #0c4e54 50%, #0f172a 100%);
+  }
+
+  .auth-card {
+    @apply w-full max-w-[480px] bg-white border border-slate-200/80 rounded-3xl p-10 shadow-2xl;
+  }
+
+  .register-card-wide,
+  .register-card-extra-wide {
+    @apply !max-w-[1000px];
+  }
+
+  .form-grid {
+    @apply grid grid-cols-2 gap-x-6;
+  }
+
+  .full-width {
+    @apply col-span-full;
+  }
+
+  .drop-zone {
+    @apply border-2 border-dashed border-primary/20 rounded-2xl p-8 text-center
+           bg-primary/5 cursor-pointer transition-all duration-300 mt-2
+           hover:border-primary hover:bg-primary/10;
+  }
+
+  .drop-zone-icon  { @apply text-3xl mb-2 block; }
+  .drop-zone-content p     { @apply font-semibold text-slate-700 mb-1; }
+  .drop-zone-content small { @apply text-slate-400; }
+
+  .file-list { @apply mt-4 flex flex-col gap-2; }
+
+  .file-item {
+    @apply flex items-center px-4 py-3 bg-white border border-black/5 rounded-xl animate-fade-in;
+  }
+
+  .file-icon   { @apply text-xl mr-3; }
+  .file-name   { @apply flex-1 text-sm text-slate-700 font-medium whitespace-nowrap overflow-hidden text-ellipsis; }
+  .file-remove {
+    @apply bg-transparent border-none text-red-500 cursor-pointer px-2 py-1 font-bold
+           opacity-60 transition-opacity duration-200 hover:opacity-100;
+  }
+
+  .auth-header        { @apply text-center mb-8; }
+  .auth-header h2     { @apply text-4xl; }
+  .auth-footer        { @apply text-center mt-6 text-sm; }
+  .form-group         { @apply mb-6; }
+  .form-label         { @apply block text-xs font-semibold text-slate-700 mb-2; }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease forwards;
+  }
+
+  /* FIX: Was completely missing — referenced in LandingPage.jsx hero section */
+  .animate-bounce-subtle {
+    animation: bounceSlight 2s ease-in-out infinite;
+  }
+
+  /* Custom scrollbar for notification panels and sidebar */
+  .custom-scrollbar::-webkit-scrollbar        { width: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-track  { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb  { @apply bg-slate-200 rounded-full; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { @apply bg-slate-300; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bounceSlight {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4px); }
+}
+
+@media (max-width: 768px) {
+  .form-grid { @apply grid-cols-1; }
+  .register-card-wide, .register-card-extra-wide { @apply !max-w-[480px]; }
+}

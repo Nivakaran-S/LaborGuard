@@ -1,0 +1,85 @@
+config:
+  target: "http://localhost:5006"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 20
+      name: "Load test"
+    - duration: 30
+      arrivalRate: 40
+      name: "Stress test"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - name: "Browse Job Listings (Public)"
+    weight: 50
+    flow:
+      - get:
+          url: "/api/jobs"
+          qs:
+            page: 1
+            limit: 10
+          expect:
+            - statusCode: 200
+
+  - name: "Browse Jobs with Filters"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/jobs"
+          qs:
+            category: "construction"
+            page: 1
+            limit: 10
+          expect:
+            - statusCode: 200
+
+  - name: "Get Job Details"
+    weight: 15
+    flow:
+      - get:
+          url: "/api/jobs"
+          qs:
+            limit: 1
+          capture:
+            - json: "$.jobs[0]._id"
+              as: "jobId"
+      - get:
+          url: "/api/jobs/{{ jobId }}"
+          expect:
+            - statusCode:
+                - 200
+                - 404
+
+  - name: "Post a Job (Employer Auth)"
+    weight: 5
+    flow:
+      - post:
+          url: "/api/jobs"
+          headers:
+            Authorization: "Bearer {{ $env.LOAD_TEST_TOKEN }}"
+          json:
+            title: "Perf Test Job {{ $randomString() }}"
+            description: "Performance testing job listing created under load."
+            category: "construction"
+            location: "Colombo"
+            salary: 50000
+            type: "full-time"
+          expect:
+            - statusCode:
+                - 201
+                - 400
+                - 401
+                - 403
+
+  - name: "Health Check"
+    weight: 10
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200

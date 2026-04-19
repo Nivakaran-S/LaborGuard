@@ -1,0 +1,23 @@
+{
+  "welcome": "LaborGuard වෙත සාදරයෙන් පිළිගනිමු",
+  "login": "ඇතුල් වන්න",
+  "register": "ලියාපදිංචි වන්න",
+  "home": "මුල් පිටුව",
+  "jobs": "රැකියා පුවරුව",
+  "community": "ප්‍රජාව",
+  "messages": "පණිවිඩ",
+  "notifications": "දැනුම්දීම්",
+  "profile": "ගිණුම",
+  "logout": "පිටවන්න",
+  "dashboard": "පාලක පුවරුව",
+  "my_complaints": "මගේ පැමිණිලි",
+  "file_complaint": "පැමිණිල්ලක් ඉදිරිපත් කරන්න",
+  "my_appointments": "මගේ හමුවීම්",
+  "roles": {
+    "worker": "සේවක",
+    "employer": "සේවා යෝජක",
+    "lawyer": "නීති නිලධාරී",
+    "ngo": "රාජ්‍ය නොවන සංවිධාන නියෝජිත",
+    "admin": "පරිපාලක"
+  }
+}
