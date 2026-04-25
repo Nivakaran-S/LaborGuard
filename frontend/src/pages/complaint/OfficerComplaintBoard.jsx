@@ -25,8 +25,9 @@ const OfficerComplaintBoard = () => {
         search: filters.search || undefined,
         assignedTo: user?.userId,
       });
-      setComplaints(response.data.data.complaints || []);
-      setPagination(response.data.data.pagination || null);
+      const body = response.data || {};
+      setComplaints(Array.isArray(body.data) ? body.data : (body.data?.complaints || []));
+      setPagination(body.pagination || body.data?.pagination || null);
     } catch (err) {
       setError(err?.response?.data?.message || 'Unable to load assigned complaints.');
     } finally {
