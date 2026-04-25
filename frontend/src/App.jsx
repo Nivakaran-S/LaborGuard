@@ -44,6 +44,7 @@ import FollowRequestsPage from './pages/community/FollowRequestsPage';
 import ChatPage from './pages/messaging/ChatPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminAppointments from './pages/admin/AdminAppointments';
+import AdminRegistry from './pages/admin/AdminRegistry';
 import NotificationsPage from './pages/notifications/NotificationsPage';
 import NotificationPreferencesPage from './pages/notifications/NotificationPreferencesPage';
 
@@ -144,6 +145,7 @@ function App() {
             <Route element={<DashboardLayout />}>
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/appointments" element={<AdminAppointments />} />
+              <Route path="/admin/registry" element={<AdminRegistry />} />
             </Route>
           </Route>
 

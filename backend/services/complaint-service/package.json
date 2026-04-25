@@ -6,7 +6,10 @@
     "scripts": {
         "start": "node src/index.js",
         "dev": "nodemon src/index.js",
-        "test": "jest"
+        "test": "jest --passWithNoTests",
+        "test:unit": "jest tests/unit --passWithNoTests",
+        "test:integration": "jest tests/integration --runInBand --passWithNoTests",
+        "loadtest": "artillery run tests/performance/load-test.yml"
     },
     "dependencies": {
         "bcryptjs": "^3.0.3",
@@ -28,7 +31,16 @@
         "helmet": "^8.0.0"
     },
     "devDependencies": {
+        "artillery": "^2.0.0",
         "jest": "^30.2.0",
-        "nodemon": "^3.0.1"
+        "mongodb-memory-server": "^10.1.4",
+        "nodemon": "^3.0.1",
+        "supertest": "^7.0.0"
+    },
+    "jest": {
+        "testEnvironment": "node",
+        "testTimeout": 30000,
+        "testMatch": ["**/tests/**/*.test.js"],
+        "testPathIgnorePatterns": ["/node_modules/", "/tests/performance/"]
     }
 }

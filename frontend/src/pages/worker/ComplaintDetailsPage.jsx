@@ -3,12 +3,12 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useComplaints } from "@/hooks/useComplaints";
 import { complaintApi } from "@/api/complaintApi";
 import { toast } from "sonner";
-import { 
-  FileText, 
-  Clock, 
-  MapPin, 
-  ShieldCheck, 
-  AlertCircle, 
+import {
+  FileText,
+  Clock,
+  MapPin,
+  ShieldCheck,
+  AlertCircle,
   CheckCircle2,
   ChevronLeft,
   Paperclip,
@@ -19,11 +19,13 @@ import {
   ShieldAlert,
   ArrowRight,
   Loader2,
-  Calendar
+  Calendar,
+  Share2
 } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { Badge } from "@/components/common/Badge";
 import { Spinner } from "@/components/common/Spinner";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -32,8 +34,10 @@ const ComplaintDetailsPage = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const { useGetComplaint, updateStatus } = useComplaints();
-    const { data: complaint, isLoading, error } = useGetComplaint(id);
+    const { data: complaint, isLoading, error, refetch } = useGetComplaint(id);
     const [requesting, setRequesting] = useState(false);
+    const [shareOpen, setShareOpen] = useState(false);
+    const [sharing, setSharing] = useState(false);
 
     const handleRequestAppointment = async () => {
         const reason = prompt('What would you like the legal officer to help with?');
@@ -47,6 +51,20 @@ const ComplaintDetailsPage = () => {
             toast.error(err.response?.data?.message || 'Failed to request appointment');
         } finally {
             setRequesting(false);
+        }
+    };
+
+    const handleShareToCommunity = async () => {
+        setSharing(true);
+        try {
+            await complaintApi.shareToCommunity(id);
+            toast.success('Shared anonymously — identifying details were removed.');
+            setShareOpen(false);
+            refetch?.();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to share');
+        } finally {
+            setSharing(false);
         }
     };
 
@@ -190,6 +208,24 @@ const ComplaintDetailsPage = () => {
                            >
                              {requesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Calendar className="h-4 w-4 mr-2" /> Request Appointment</>}
                            </Button>
+                         )}
+                         {user?.role === 'worker'
+                           && complaint.workerId === user.userId
+                           && ['resolved', 'rejected'].includes(complaint.status)
+                           && !complaint.sharedToCommunityAt && (
+                             <Button
+                               onClick={() => setShareOpen(true)}
+                               variant="outline"
+                               className="w-full h-14 rounded-[32px] font-black uppercase tracking-widest text-[10px] border-2 border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"
+                             >
+                               <Share2 className="h-4 w-4 mr-2" />
+                               Share Anonymously
+                             </Button>
+                         )}
+                         {complaint.sharedToCommunityAt && complaint.workerId === user?.userId && (
+                           <p className="text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+                             Already shared to community
+                           </p>
                          )}
                     </div>
                  </div>
@@ -356,6 +392,17 @@ const ComplaintDetailsPage = () => {
                     </div>
                 </div>
             </div>
+
+            <ConfirmDialog
+              isOpen={shareOpen}
+              onClose={() => !sharing && setShareOpen(false)}
+              onConfirm={handleShareToCommunity}
+              title="Share anonymously to community?"
+              description="Your case title, description, category, and district will be posted as an 'Anonymous Worker' update. Your name, employer name, city, and attachments will be removed. This cannot be undone."
+              confirmLabel="Share Anonymously"
+              variant="info"
+              isLoading={sharing}
+            />
         </div>
     );
 };

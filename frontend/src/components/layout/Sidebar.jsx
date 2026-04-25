@@ -51,6 +51,7 @@ const Sidebar = ({ className }) => {
         { title: t("nav.users", "User Registry"),          href: "/admin/dashboard?tab=users",   icon: Users },
         { title: t("nav.complaints", "Complaints"),        href: "/complaints/admin",            icon: FileText },
         { title: t("nav.appointments", "Appointments"),    href: "/admin/appointments",          icon: Calendar },
+        { title: t("nav.legal_registry", "Legal Registry"),href: "/admin/registry",              icon: Gavel },
         { title: t("nav.analytics", "Global Analytics"),   href: "/admin/dashboard?tab=analytics",icon: BarChart3 },
       ],
     };
