@@ -42,9 +42,9 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: GOOGLE_CALLBACK_URL
-        value: https://laborguard-auth-service.onrender.com/api/auth/google/callback
+        value: https://laborguard-auth-service-szvs.onrender.com/api/auth/google/callback
       - key: FRONTEND_URL
-        value: https://labor-guard.vercel.app
+        value: https://labor-guard-15vm.vercel.app
       - key: GROQ_API_KEY
         sync: false
       - key: GEMINI_API_KEY
@@ -59,9 +59,9 @@ services:
         sync: false
       # auth-service emits cross-service events over HTTP to these consumers.
       - key: NOTIFICATION_SERVICE_URL
-        value: https://laborguard-notification-service.onrender.com
+        value: https://laborguard-notification-service-szvs.onrender.com
       - key: COMMUNITY_SERVICE_URL
-        value: https://laborguard-community-service.onrender.com
+        value: https://laborguard-community-service-szvs.onrender.com
 
   # ── Community Service ──────────────────────────────────────────────────────
   - type: web
@@ -103,7 +103,7 @@ services:
       - key: INTERNAL_SERVICE_SECRET
         sync: false
       - key: NOTIFICATION_SERVICE_URL
-        value: https://laborguard-notification-service.onrender.com
+        value: https://laborguard-notification-service-szvs.onrender.com
 
   # ── Complaint Service ──────────────────────────────────────────────────────
   - type: web
@@ -141,15 +141,15 @@ services:
       - key: SYSTEM_DEFAULT_EMAIL
         sync: false
       - key: FRONTEND_URL
-        value: https://labor-guard.vercel.app
+        value: https://labor-guard-15vm.vercel.app
       - key: INTERNAL_SERVICE_SECRET
         sync: false
       - key: NOTIFICATION_SERVICE_URL
-        value: https://laborguard-notification-service.onrender.com
+        value: https://laborguard-notification-service-szvs.onrender.com
       - key: COMMUNITY_SERVICE_URL
-        value: https://laborguard-community-service.onrender.com
+        value: https://laborguard-community-service-szvs.onrender.com
       - key: MESSAGING_SERVICE_URL
-        value: https://laborguard-messaging-service.onrender.com
+        value: https://laborguard-messaging-service-szvs.onrender.com
 
   # ── Notification Service ───────────────────────────────────────────────────
   - type: web
@@ -181,11 +181,11 @@ services:
         sync: false
       # Cross-service: receives events from siblings, looks up user emails on auth-service.
       - key: AUTH_SERVICE_URL
-        value: https://laborguard-auth-service.onrender.com
+        value: https://laborguard-auth-service-szvs.onrender.com
       - key: INTERNAL_SERVICE_SECRET
         sync: false
       - key: APP_URL
-        value: https://labor-guard.vercel.app
+        value: https://labor-guard-15vm.vercel.app
 
   # ── Messaging Service ──────────────────────────────────────────────────────
   - type: web
@@ -226,7 +226,7 @@ services:
       - key: INTERNAL_SERVICE_SECRET
         sync: false
       - key: NOTIFICATION_SERVICE_URL
-        value: https://laborguard-notification-service.onrender.com
+        value: https://laborguard-notification-service-szvs.onrender.com
 
   # ── Job Service ────────────────────────────────────────────────────────────
   - type: web
@@ -259,7 +259,7 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: FRONTEND_URL
-        value: https://labor-guard.vercel.app
+        value: https://labor-guard-15vm.vercel.app
 
   # ── Centrifugo (real-time messaging gateway) ───────────────────────────────
   # Image-based service — no Node build, just pulls the upstream Docker image.
