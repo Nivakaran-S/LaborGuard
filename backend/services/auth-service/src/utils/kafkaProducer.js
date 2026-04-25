@@ -48,15 +48,18 @@ const postEvent = async (baseUrl, topic, eventType, payload) => {
     }
 };
 
+// Returns a Promise that resolves once all consumer POSTs have settled.
+// Never rejects — failures are logged in postEvent. Callers can either
+// `await` it, chain `.then/.catch`, or fire-and-forget without an await.
 const emitEvent = (topic, eventType, payload) => {
     const targets = ROUTES[topic];
     if (!targets) {
         console.warn(`[${SERVICE_NAME}] No HTTP route configured for topic ${topic}`);
-        return;
+        return Promise.resolve();
     }
-    targets.forEach((url) => {
-        postEvent(url, topic, eventType, payload).catch(() => {});
-    });
+    return Promise.allSettled(
+        targets.map((url) => postEvent(url, topic, eventType, payload))
+    );
 };
 
 // Legacy: server.js calls connectProducer() once at boot. No-op now.

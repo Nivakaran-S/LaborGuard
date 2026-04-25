@@ -50,17 +50,17 @@ const postEvent = async (baseUrl, topic, eventType, payload) => {
     }
 };
 
+// Returns a Promise (never rejects). Callers can `await`, `.catch()`, or
+// fire-and-forget — all three work because postEvent swallows its own errors.
 const emitEvent = (topic, eventType, payload) => {
     const targets = ROUTES[topic];
     if (!targets) {
         console.warn(`[${SERVICE_NAME}] No HTTP route configured for topic ${topic}`);
-        return;
+        return Promise.resolve();
     }
-    // Fire-and-forget: don't return the promise so callers without await
-    // continue immediately. Each target gets its own try/catch inside postEvent.
-    targets.forEach((url) => {
-        postEvent(url, topic, eventType, payload).catch(() => {});
-    });
+    return Promise.allSettled(
+        targets.map((url) => postEvent(url, topic, eventType, payload))
+    );
 };
 
 // Legacy compatibility: Kafka producer setup used to call `connectProducer()`

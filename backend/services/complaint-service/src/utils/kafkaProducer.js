@@ -53,15 +53,17 @@ const postEvent = async (baseUrl, topic, eventType, payload) => {
     }
 };
 
+// Returns a never-rejecting Promise so callers can await/.catch/.then or
+// fire-and-forget interchangeably.
 const emitEvent = (topic, eventType, payload) => {
     const targets = ROUTES[topic];
     if (!targets) {
         console.warn(`[${SERVICE_NAME}] No HTTP route configured for topic ${topic}`);
-        return;
+        return Promise.resolve();
     }
-    targets.forEach((url) => {
-        postEvent(url, topic, eventType, payload).catch(() => {});
-    });
+    return Promise.allSettled(
+        targets.map((url) => postEvent(url, topic, eventType, payload))
+    );
 };
 
 const connectProducer = async () => {}; // legacy no-op
