@@ -347,7 +347,7 @@ const shareToCommunity = async (req, res, next) => {
     if (!complaint) {
       return res.status(404).json({ success: false, message: 'Complaint not found' });
     }
-    if (complaint.workerId.toString() !== req.user._id.toString()) {
+    if (complaint.workerId.toString() !== req.user.userId.toString()) {
       return res.status(403).json({ success: false, message: 'Only the filer can share this case' });
     }
     if (!['resolved', 'rejected'].includes(complaint.status)) {
