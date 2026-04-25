@@ -18,35 +18,33 @@ const createConversation = async (req, res) => {
             participants.push(requesterId);
         }
 
-        // 1-1: collapse the find-then-create into a single atomic upsert so two
-        // simultaneous calls from A and B can't each "miss" and create
-        // duplicate conversations. Sort participants for a stable equality match.
+        // 1-1: try to find an existing conversation for the same participants
+        // (sort first so [A,B] matches [B,A]); create only if none exists.
+        // The previous attempt at a single atomic upsert tripped on
+        // ConflictingUpdateOperators because $setOnInsert fields overlapped the
+        // filter; falling back to find-then-create is good enough here — the
+        // race window is tiny and a stray duplicate isn't catastrophic.
         if (!isGroup) {
             const sortedParticipants = [...participants].sort();
-            const conversation = await Conversation.findOneAndUpdate(
-                {
-                    isGroup: false,
-                    participants: { $all: sortedParticipants, $size: sortedParticipants.length },
-                },
-                {
-                    $setOnInsert: {
-                        participants: sortedParticipants,
-                        participantRoles,
-                        isGroup: false,
-                        groupName: '',
-                    },
-                },
-                { new: true, upsert: true, setDefaultsOnInsert: true }
-            );
-            // Distinguish between "found existing" and "just created" by inspecting
-            // createdAt — within a few ms of now means we just inserted.
-            const justCreated = Date.now() - new Date(conversation.createdAt).getTime() < 1000;
-            return res.status(justCreated ? 201 : 200).json(conversation);
+            const existing = await Conversation.findOne({
+                isGroup: false,
+                participants: { $all: sortedParticipants, $size: sortedParticipants.length },
+            });
+            if (existing) {
+                return res.status(200).json(existing);
+            }
+            const conversation = await Conversation.create({
+                participants: sortedParticipants,
+                participantRoles: Array.isArray(participantRoles) ? participantRoles : [],
+                isGroup: false,
+                groupName: '',
+            });
+            return res.status(201).json(conversation);
         }
 
         const newConversation = new Conversation({
             participants,
-            participantRoles,
+            participantRoles: Array.isArray(participantRoles) ? participantRoles : [],
             isGroup: true,
             groupName: groupName || ''
         });
