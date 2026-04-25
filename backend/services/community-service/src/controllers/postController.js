@@ -291,6 +291,87 @@ exports.votePoll = async (req, res) => {
     }
 };
 
+// ── getPostLikers ─────────────────────────────────────────────────────────────
+exports.getPostLikers = async (req, res) => {
+    try {
+        const { postId } = req.params;
+
+        const post = await Post.findById(postId, { likes: 1 }).lean();
+        if (!post) return res.status(404).json({ message: 'Post not found' });
+
+        if (!post.likes?.length) return res.json([]);
+
+        const profiles = await UserProfile.find(
+            { userId: { $in: post.likes } },
+            { userId: 1, name: 1, avatarUrl: 1, role: 1, isVerified: 1 }
+        ).lean();
+
+        res.json(profiles);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching likers', error: error.message });
+    }
+};
+
+// ── getPostsByAuthor ──────────────────────────────────────────────────────────
+exports.getPostsByAuthor = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const page  = Math.max(1, parseInt(req.query.page)  || 1);
+        const limit = Math.min(50, parseInt(req.query.limit) || 20);
+
+        // Privacy check (Phase 3.1): private profiles only reveal posts to followers / self.
+        const profile = await UserProfile.findOne(
+            { userId },
+            { isPrivate: 1, followers: 1 }
+        ).lean();
+
+        if (profile?.isPrivate) {
+            const callerId = req.user.userId;
+            const isSelf = callerId === userId;
+            const isFollower = profile.followers?.includes(callerId);
+            if (!isSelf && !isFollower) {
+                return res.status(403).json({ message: 'This profile is private' });
+            }
+        }
+
+        const posts = await Post.find({ authorId: userId })
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .lean();
+
+        res.json(posts);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching author posts', error: error.message });
+    }
+};
+
+// ── searchPosts ───────────────────────────────────────────────────────────────
+exports.searchPosts = async (req, res) => {
+    try {
+        const q = (req.query.q || '').trim();
+        const page  = Math.max(1, parseInt(req.query.page)  || 1);
+        const limit = Math.min(50, parseInt(req.query.limit) || 20);
+
+        if (q.length < 2) {
+            return res.status(400).json({ message: 'Query must be at least 2 characters' });
+        }
+
+        const posts = await Post.find(
+            { $text: { $search: q } },
+            { score: { $meta: 'textScore' } }
+        )
+            .sort({ score: { $meta: 'textScore' }, createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .lean();
+
+        res.json(posts);
+    } catch (error) {
+        res.status(500).json({ message: 'Error searching posts', error: error.message });
+    }
+};
+
 // ── reportPost ────────────────────────────────────────────────────────────────
 exports.reportPost = async (req, res) => {
     try {

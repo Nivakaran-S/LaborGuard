@@ -29,4 +29,10 @@ router.put('/users/:id/status', adminController.deactivateUser);
 // DELETE /api/admin/users/:id
 router.delete('/users/:id', adminController.deleteUser);
 
+// Moderation actions (Phase 5.4)
+router.post('/users/:id/warn',    adminController.warnUser);
+router.post('/users/:id/suspend', adminController.suspendUser);
+router.post('/users/:id/ban',     adminController.banUser);
+router.post('/users/:id/lift',    adminController.liftSuspension);
+
 module.exports = router;

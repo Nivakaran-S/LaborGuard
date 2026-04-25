@@ -2,15 +2,18 @@ import { useState } from "react";
 import { useComplaints } from "@/hooks/useComplaints";
 import { complaintApi } from "@/api/complaintApi";
 import { Link } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldAlert, Search, Filter, Map, ChevronRight,
-  MessageSquare, ShieldCheck, Eye
+  MessageSquare, ShieldCheck, Eye, Eye as EyeIcon, EyeOff, LayoutGrid
 } from "lucide-react";
 import { Button } from "@/components/common/Button";
 import { Badge } from "@/components/common/Badge";
 import { Input } from "@/components/common/Input";
 import { Spinner } from "@/components/common/Spinner";
 import { EmptyState } from "@/components/common/EmptyState";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const PRIORITY_CONFIG = {
@@ -21,20 +24,63 @@ const PRIORITY_CONFIG = {
 };
 
 const NGOCasesPage = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { useGetComplaints } = useComplaints();
   const [searchTerm, setSearchTerm] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [tab, setTab] = useState("all"); // 'all' | 'monitored'
 
-  const { data: casesData, isLoading } = useGetComplaints({
+  const { data: casesData, isLoading: loadingAll } = useGetComplaints({
     priority: priorityFilter !== "all" ? priorityFilter : undefined,
     status: "pending",
   });
-  const cases = casesData?.complaints || [];
+
+  const { data: monitoredData, isLoading: loadingMonitored } = useQuery({
+    queryKey: ["ngo-monitored-cases", priorityFilter],
+    queryFn: async () => {
+      const params = {};
+      if (priorityFilter !== "all") params.priority = priorityFilter;
+      const res = await complaintApi.getMonitoredComplaints(params);
+      return res.data.data || [];
+    },
+    enabled: !!user?.userId && tab === "monitored",
+  });
+
+  const myId = user?.userId;
+  const allCases = casesData?.complaints || [];
+  const monitoredCases = monitoredData || [];
+  const cases = tab === "monitored" ? monitoredCases : allCases;
+  const isLoading = tab === "monitored" ? loadingMonitored : loadingAll;
 
   const filtered = cases?.filter((c) =>
     c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.location?.city?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const monitorMutation = useMutation({
+    mutationFn: (id) => complaintApi.monitorComplaint(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["ngo-monitored-cases"]);
+      queryClient.invalidateQueries(["complaints"]);
+      toast.success("Added to your watchlist");
+    },
+    onError: (err) => toast.error(err.response?.data?.message || "Failed to monitor"),
+  });
+  const unmonitorMutation = useMutation({
+    mutationFn: (id) => complaintApi.unmonitorComplaint(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["ngo-monitored-cases"]);
+      queryClient.invalidateQueries(["complaints"]);
+      toast.success("Removed from watchlist");
+    },
+    onError: (err) => toast.error(err.response?.data?.message || "Failed to update"),
+  });
+
+  const isMonitoring = (c) => {
+    if (!myId) return false;
+    return (c.monitoredByNGOs || []).some((id) => String(id) === String(myId));
+  };
 
   if (isLoading)
     return (
@@ -56,8 +102,37 @@ const NGOCasesPage = () => {
           Active <span className="text-primary italic">Cases.</span>
         </h1>
         <p className="text-sm font-bold text-slate-400 max-w-xl uppercase italic">
-          Unassigned critical violations requiring NGO oversight and intervention.
+          {tab === "monitored"
+            ? "Cases your organization is actively monitoring."
+            : "Unassigned critical violations requiring NGO oversight and intervention."}
         </p>
+
+        {/* Tab toggle: All vs Monitored */}
+        <div className="inline-flex items-center gap-1 bg-slate-900 p-1.5 rounded-2xl shadow-xl">
+          <button
+            onClick={() => setTab("all")}
+            className={cn(
+              "h-10 px-5 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2",
+              tab === "all" ? "bg-primary text-white shadow-md" : "text-slate-400 hover:text-white"
+            )}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" /> All Cases
+          </button>
+          <button
+            onClick={() => setTab("monitored")}
+            className={cn(
+              "h-10 px-5 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2",
+              tab === "monitored" ? "bg-primary text-white shadow-md" : "text-slate-400 hover:text-white"
+            )}
+          >
+            <EyeIcon className="h-3.5 w-3.5" /> My Watchlist
+            {monitoredCases.length > 0 && (
+              <span className="ml-1 text-[9px] bg-white/20 rounded-full px-1.5">
+                {monitoredCases.length}
+              </span>
+            )}
+          </button>
+        </div>
       </header>
 
       {/* Filters */}
@@ -135,22 +210,47 @@ const NGOCasesPage = () => {
                     </div>
                   </div>
 
-                  <div className="pt-8 border-t border-slate-50 mt-auto flex justify-between items-center">
+                  <div className="pt-8 border-t border-slate-50 mt-auto flex justify-between items-center gap-2">
                     <div className="flex items-center gap-3">
                       <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
                       <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500">
                         Pending Assignment
                       </span>
                     </div>
-                    <Button
-                      asChild
-                      className="h-14 px-8 rounded-full font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-primary/20 group"
-                    >
-                      <Link to={`/ngo/cases/${c._id}`}>
-                        View Case
-                        <ChevronRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
-                      </Link>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {isMonitoring(c) ? (
+                        <Button
+                          onClick={() => unmonitorMutation.mutate(c._id)}
+                          disabled={unmonitorMutation.isPending}
+                          variant="outline"
+                          className="h-12 px-4 rounded-full font-black uppercase tracking-widest text-[10px] border-2"
+                          title="Remove from watchlist"
+                        >
+                          <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+                          Unwatch
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => monitorMutation.mutate(c._id)}
+                          disabled={monitorMutation.isPending}
+                          variant="outline"
+                          className="h-12 px-4 rounded-full font-black uppercase tracking-widest text-[10px] border-2"
+                          title="Add to watchlist"
+                        >
+                          <EyeIcon className="h-3.5 w-3.5 mr-1.5" />
+                          Monitor
+                        </Button>
+                      )}
+                      <Button
+                        asChild
+                        className="h-12 px-6 rounded-full font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-primary/20 group"
+                      >
+                        <Link to={`/ngo/cases/${c._id}`}>
+                          View
+                          <ChevronRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

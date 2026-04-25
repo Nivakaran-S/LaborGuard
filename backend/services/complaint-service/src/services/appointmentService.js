@@ -1,4 +1,5 @@
 const Appointment = require('../models/Appointment');
+const Complaint = require('../models/Complaint');
 const LegalOfficerRegistry = require('../models/LegalOfficerRegistry');
 const { sendAppointmentConfirmationEmail, sendAppointmentNotificationToOfficer } = require('./emailService');
 
@@ -360,6 +361,119 @@ const cancelAppointment = async (appointmentId, { reason }, user) => {
   return appointment;
 };
 
+/**
+ * Worker requests an appointment for their own complaint (W20).
+ * Creates an appointment with status='requested'; admin must confirm later.
+ * No officer is auto-assigned on request — the complaint may not yet be eligible
+ * for auto-booking. Admin will assign on confirmation.
+ */
+const requestAppointment = async ({ complaintId, preferredDate, reason }, user) => {
+  const complaint = await Complaint.findById(complaintId);
+  if (!complaint) {
+    const error = new Error('Complaint not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (complaint.workerId.toString() !== user.userId) {
+    const error = new Error('You can only request appointments for your own complaints');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  // Don't request for closed cases
+  if (['resolved', 'rejected'].includes(complaint.status)) {
+    const error = new Error('Cannot request an appointment for a closed case');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Prevent spam: at most one pending request per complaint
+  const existing = await Appointment.findOne({
+    complaintId,
+    workerId: user.userId,
+    status: { $in: ['requested', 'auto_booked', 'confirmed'] }
+  });
+  if (existing) {
+    const error = new Error('An appointment already exists for this complaint');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const specialization = {
+    wage_theft: 'labor_law',
+    wrongful_termination: 'labor_law',
+    harassment: 'harassment_law',
+    discrimination: 'discrimination_law',
+  }[complaint.category] || 'labor_law';
+
+  const scheduledAt = preferredDate ? new Date(preferredDate) : getNextAvailableSlot();
+
+  const appointment = await Appointment.create({
+    complaintId: complaint._id,
+    workerId: complaint.workerId,
+    // Placeholder officer — admin will reassign on confirm. Temporarily use the
+    // complaint's assignedTo if any, else the worker's own id (admin will change).
+    legalOfficerId: complaint.assignedTo || complaint.workerId,
+    category: ['wage_theft', 'wrongful_termination', 'harassment', 'discrimination']
+      .includes(complaint.category) ? complaint.category : 'wage_theft',
+    specialization,
+    scheduledAt,
+    status: 'requested',
+    meetingType: 'online',
+    notes: reason ? `Worker-requested: ${reason}` : 'Worker-requested appointment'
+  });
+
+  return appointment;
+};
+
+/**
+ * Assigned legal officer records post-meeting outcome notes (L5).
+ * Sets outcomeNotes + timestamp + recorder. Optionally marks appointment completed.
+ */
+const recordAppointmentOutcome = async (appointmentId, { outcomeNotes, markCompleted }, user) => {
+  const appointment = await Appointment.findById(appointmentId);
+  if (!appointment) {
+    const error = new Error('Appointment not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const isAssigned = appointment.legalOfficerId.toString() === user.userId;
+  const isAdmin = user.role === 'admin';
+  if (!isAssigned && !isAdmin) {
+    const error = new Error('Only the assigned legal officer or an admin can record outcomes');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (appointment.status === 'cancelled') {
+    const error = new Error('Cannot record outcome on a cancelled appointment');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!outcomeNotes?.trim()) {
+    const error = new Error('outcomeNotes is required');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  appointment.outcomeNotes = outcomeNotes.trim();
+  appointment.outcomeRecordedAt = new Date();
+  appointment.outcomeRecordedBy = user.userId;
+  if (markCompleted === true && appointment.status !== 'completed') {
+    appointment.status = 'completed';
+    // Decrement officer load when a meeting is finalised
+    await LegalOfficerRegistry.findOneAndUpdate(
+      { officerId: appointment.legalOfficerId },
+      { $inc: { activeAppointmentCount: -1 } }
+    );
+  }
+
+  await appointment.save();
+  return appointment;
+};
+
 module.exports = {
   isEligibleForAppointment,
   autoCreateAppointment,
@@ -369,5 +483,7 @@ module.exports = {
   getAppointmentById,
   confirmAppointment,
   rescheduleAppointment,
-  cancelAppointment
+  cancelAppointment,
+  requestAppointment,
+  recordAppointmentOutcome
 };

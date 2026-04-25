@@ -66,11 +66,32 @@ export const useNotifications = () => {
     },
   });
 
+  const useGetPreferences = () =>
+    useQuery({
+      queryKey: ["notification-preferences"],
+      queryFn: async () => {
+        const res = await notificationApi.getPreferences();
+        return res.data;
+      },
+    });
+
+  const updatePreferencesMutation = useMutation({
+    mutationFn: (data) => notificationApi.updatePreferences(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notification-preferences"] });
+      toast.success("Preferences saved");
+    },
+    onError: (err) =>
+      toast.error(err.response?.data?.message || "Failed to save preferences"),
+  });
+
   return {
     useGetNotifications,
     useGetUnreadCount,
-    markAsRead       : markAsReadMutation,
-    markAllAsRead    : markAllAsReadMutation,
+    useGetPreferences,
+    markAsRead        : markAsReadMutation,
+    markAllAsRead     : markAllAsReadMutation,
     deleteNotification: deleteNotificationMutation,
+    updatePreferences : updatePreferencesMutation,
   };
 };

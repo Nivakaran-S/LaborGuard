@@ -56,6 +56,18 @@ router.get('/me', protect, authController.getProfile);
 router.patch('/me', protect, upload.single('profileImage'), authController.updateProfile);
 router.post('/change-password', protect, changePasswordValidator, validate, authController.changePassword);
 
+// ── Internal service-to-service routes ────────────────────────
+// Guarded by a shared secret header. Only sibling microservices should call these.
+const internalOnly = (req, res, next) => {
+  const secret = req.get('x-internal-secret');
+  const expected = process.env.INTERNAL_SERVICE_SECRET;
+  if (!expected || secret !== expected) {
+    return res.status(403).json({ success: false, message: 'Forbidden' });
+  }
+  next();
+};
+router.get('/internal/users/:id/email', internalOnly, authController.internalGetUserEmail);
+
 // ── Google OAuth ──────────────────────────────────────────────
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 router.get(

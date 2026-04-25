@@ -2,13 +2,15 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Heart, MessageCircle, Share2, Bookmark, MoreHorizontal,
-  ShieldCheck, Trash2, Flag, Link2, CheckCircle2
+  ShieldCheck, Trash2, Flag, Link2, CheckCircle2, Pencil
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/common/Avatar";
 import { Badge } from "@/components/common/Badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDistanceToNow } from "date-fns";
+import { PostEditorModal } from "@/components/community/PostEditorModal";
+import { LikersModal } from "@/components/community/LikersModal";
 
 /**
  * CommunityPostCard — Instagram-style post card.
@@ -42,6 +44,8 @@ const CommunityPostCard = ({
   const [likeCount, setLikeCount] = useState(post.likes?.length || 0);
   const [bookmarked, setBookmarked] = useState(isBookmarked);
   const [shareFlash, setShareFlash] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [likersOpen, setLikersOpen] = useState(false);
 
   const isOwner = post.authorId === user?.userId;
 
@@ -125,6 +129,14 @@ const CommunityPostCard = ({
               >
                 <Link2 className="h-3.5 w-3.5" /> Copy Link
               </button>
+              {isOwner && (
+                <button
+                  onClick={() => { setEditorOpen(true); setShowMenu(false); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 text-left"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit Post
+                </button>
+              )}
               {isOwner && (
                 <button
                   onClick={() => { onDelete?.(post._id); setShowMenu(false); }}
@@ -279,7 +291,13 @@ const CommunityPostCard = ({
       {/* ─── Like summary ─────────────────────────────────────────────── */}
       {likeCount > 0 && (
         <div className="px-4 pb-3">
-          <p className="text-xs font-bold text-slate-700">{likeCount.toLocaleString()} {likeCount === 1 ? "like" : "likes"}</p>
+          <button
+            type="button"
+            onClick={() => setLikersOpen(true)}
+            className="text-xs font-bold text-slate-700 hover:text-red-500 transition-colors"
+          >
+            {likeCount.toLocaleString()} {likeCount === 1 ? "like" : "likes"}
+          </button>
         </div>
       )}
 
@@ -287,6 +305,9 @@ const CommunityPostCard = ({
       {showMenu && (
         <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
       )}
+
+      <PostEditorModal open={editorOpen} onClose={() => setEditorOpen(false)} post={post} />
+      <LikersModal open={likersOpen} onClose={() => setLikersOpen(false)} postId={post._id} />
     </article>
   );
 };

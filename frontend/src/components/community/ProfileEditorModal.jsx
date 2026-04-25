@@ -1,15 +1,23 @@
 import { useEffect, useState } from "react";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { communityApi } from "@/api/communityApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const MAX_BIO = 200;
+const HIDDEN_FIELD_OPTIONS = [
+  { key: 'bio', label: 'Hide bio from strangers' },
+  { key: 'followers', label: 'Hide followers list' },
+  { key: 'following', label: 'Hide following list' },
+];
 
 const ProfileEditorModal = ({ open, onClose, profile, userId }) => {
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [hiddenFields, setHiddenFields] = useState([]);
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
 
@@ -17,6 +25,8 @@ const ProfileEditorModal = ({ open, onClose, profile, userId }) => {
     if (open && profile) {
       setBio(profile.bio || "");
       setAvatarUrl(profile.avatarUrl || "");
+      setIsPrivate(Boolean(profile.isPrivate));
+      setHiddenFields(profile.hiddenFields || []);
     }
   }, [open, profile]);
 
@@ -32,6 +42,8 @@ const ProfileEditorModal = ({ open, onClose, profile, userId }) => {
         role: profile?.role,
         bio: bio.trim(),
         avatarUrl: avatarUrl.trim(),
+        isPrivate,
+        hiddenFields,
       });
       await queryClient.invalidateQueries({ queryKey: ["community-profile", userId] });
       toast.success("Profile updated!");
@@ -85,6 +97,47 @@ const ProfileEditorModal = ({ open, onClose, profile, userId }) => {
               placeholder="Tell the community about yourself…"
               className="w-full min-h-[100px] bg-slate-50 border-none rounded-2xl p-4 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-200 resize-none"
             />
+          </div>
+
+          {/* Privacy controls (Phase 3.1) */}
+          <div className="space-y-3 pt-2 border-t border-slate-100">
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <button
+                type="button"
+                onClick={() => setIsPrivate((v) => !v)}
+                className={cn(
+                  'h-5 w-9 rounded-full transition-colors relative flex-shrink-0',
+                  isPrivate ? 'bg-teal-500' : 'bg-slate-200'
+                )}
+              >
+                <div className={cn(
+                  'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all',
+                  isPrivate ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'
+                )} />
+              </button>
+              <span className="flex items-center gap-1.5 text-sm font-black text-slate-800">
+                <Lock className="h-3.5 w-3.5" /> Private Account
+              </span>
+            </label>
+            <p className="text-[10px] text-slate-400 font-medium ml-12 -mt-2">
+              When on, only approved followers can see your posts and full profile.
+            </p>
+
+            {HIDDEN_FIELD_OPTIONS.map((f) => (
+              <label key={f.key} className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={hiddenFields.includes(f.key)}
+                  onChange={(e) => {
+                    setHiddenFields((cur) =>
+                      e.target.checked ? [...cur, f.key] : cur.filter((h) => h !== f.key)
+                    );
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-teal-500 focus:ring-teal-300"
+                />
+                <span className="text-xs font-bold text-slate-600">{f.label}</span>
+              </label>
+            ))}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">

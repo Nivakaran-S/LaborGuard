@@ -38,10 +38,14 @@ import AdvocacyHub from './pages/community/AdvocacyHub';
 import UserProfilePage from './pages/community/UserProfilePage';
 import ExplorePage from './pages/community/ExplorePage';
 import BookmarksPage from './pages/community/BookmarksPage';
+import CampaignsPage from './pages/community/CampaignsPage';
+import CampaignDetailPage from './pages/community/CampaignDetailPage';
+import FollowRequestsPage from './pages/community/FollowRequestsPage';
 import ChatPage from './pages/messaging/ChatPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminAppointments from './pages/admin/AdminAppointments';
 import NotificationsPage from './pages/notifications/NotificationsPage';
+import NotificationPreferencesPage from './pages/notifications/NotificationPreferencesPage';
 
 import { ProtectedRoute, PublicRoute } from './components/auth/ProtectedRoute';
 
@@ -162,9 +166,13 @@ function App() {
               <Route path="/community/explore"             element={<ExplorePage />} />
               <Route path="/community/bookmarks"           element={<BookmarksPage />} />
               <Route path="/community/advocacy"            element={<AdvocacyHub />} />
+              <Route path="/community/campaigns"           element={<CampaignsPage />} />
+              <Route path="/community/campaigns/:id"       element={<CampaignDetailPage />} />
+              <Route path="/community/follow-requests"     element={<FollowRequestsPage />} />
               <Route path="/community/profile/:userId"     element={<UserProfilePage />} />
               <Route path="/messages"                      element={<ChatPage />} />
-              <Route path="/notifications"                  element={<NotificationsPage />} />
+              <Route path="/notifications"                 element={<NotificationsPage />} />
+              <Route path="/notifications/preferences"     element={<NotificationPreferencesPage />} />
             </Route>
           </Route>
 

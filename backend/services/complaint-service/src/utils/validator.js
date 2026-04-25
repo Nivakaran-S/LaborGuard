@@ -148,7 +148,7 @@ const updateComplaintRules = [
 const updateStatusRules = [
   body('status')
     .notEmpty().withMessage('Status is required')
-    .isIn(['pending', 'under_review', 'resolved', 'rejected'])
+    .isIn(['pending', 'under_review', 'in_progress', 'resolved', 'rejected'])
     .withMessage('Invalid status value'),
 
   body('reason')
@@ -176,7 +176,7 @@ const listComplaintsRules = [
     .optional()
     .custom((value) => {
       if (value === '') return true; // Allow empty string
-      return ['pending', 'under_review', 'resolved', 'rejected'].includes(value);
+      return ['pending', 'under_review', 'in_progress', 'resolved', 'rejected'].includes(value);
     })
     .withMessage('Invalid status filter'),
 
@@ -514,7 +514,7 @@ module.exports = {
 // const updateStatusRules = [
 //   body('status')
 //     .notEmpty().withMessage('Status is required')
-//     .isIn(['pending', 'under_review', 'resolved', 'rejected'])
+//     .isIn(['pending', 'under_review', 'in_progress', 'resolved', 'rejected'])
 //     .withMessage('Invalid status value'),
 
 //   body('reason')
@@ -551,7 +551,7 @@ module.exports = {
 
 //   query('status')
 //     .optional()
-//     .isIn(['pending', 'under_review', 'resolved', 'rejected'])
+//     .isIn(['pending', 'under_review', 'in_progress', 'resolved', 'rejected'])
 //     .withMessage('Invalid status filter'),
 
 //   query('category')

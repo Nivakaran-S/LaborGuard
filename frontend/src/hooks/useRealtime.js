@@ -1,9 +1,18 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { Centrifuge } from 'centrifuge';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useMessagingStore } from '@/store/messagingStore';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationStore } from '@/store/notificationStore';
+
+// Show each degraded-mode toast at most once per session so users aren't spammed.
+const warnedKeys = new Set();
+const warnOnce = (key, message, opts = {}) => {
+  if (warnedKeys.has(key)) return;
+  warnedKeys.add(key);
+  toast.warning(message, { id: `realtime-${key}`, duration: 6000, ...opts });
+};
 
 export const useRealtime = () => {
   const queryClient = useQueryClient();
@@ -30,10 +39,24 @@ export const useRealtime = () => {
     }
   }, [user?.userId, incrementUnread, queryClient]);
 
+  // Track whether we've ever connected this session so we can distinguish
+  // "never connected" (silent) from "lost connection mid-session" (toast).
+  const hasConnectedRef = useRef(false);
+
   useEffect(() => {
-    // FIX: Guard all three required values before attempting connection
-    if (!accessToken || !user || !import.meta.env.VITE_CENTRIFUGO_URL) {
-      console.warn('Centrifugo: skipping connection — missing token, user, or VITE_CENTRIFUGO_URL');
+    // Surface degraded-mode reasons to the user once per session so they
+    // understand why messages aren't arriving live.
+    if (!user || !accessToken) {
+      // Not logged in yet — silent. The user will get realtime when they auth.
+      return;
+    }
+    if (!import.meta.env.VITE_CENTRIFUGO_URL) {
+      console.warn('Centrifugo: skipping connection — VITE_CENTRIFUGO_URL not set');
+      warnOnce(
+        'no-url',
+        "Live updates are off — you'll see new messages and notifications after refreshing.",
+        { description: 'Real-time service is not configured for this environment.' }
+      );
       return;
     }
 
@@ -44,21 +67,57 @@ export const useRealtime = () => {
       });
     } catch (err) {
       console.error('Centrifugo: failed to initialize:', err);
+      warnOnce(
+        'init-failed',
+        "Couldn't start live updates — you'll need to refresh to see new messages.",
+        { description: err?.message }
+      );
       return;
     }
 
     centrifuge.on('connected', () => {
       console.log('Centrifugo connected');
+      hasConnectedRef.current = true;
+      // If we'd previously shown a "lost connection" toast, clear it.
+      toast.dismiss('realtime-lost');
+      warnedKeys.delete('lost');
     });
 
     centrifuge.on('disconnected', (ctx) => {
-      // FIX: Log reason code — helps debug; does NOT crash the app
       console.warn('Centrifugo disconnected. Code:', ctx.code, '| Reason:', ctx.reason);
+      // Auth failures (codes 3500–3999 in Centrifuge) and "unauthorized" reasons
+      // are usually a stale/invalid token — distinct from a transient blip.
+      const isAuthFail =
+        ctx?.code === 3500 ||
+        ctx?.code === 109 ||
+        /unauthorized|invalid token|expired/i.test(ctx?.reason || '');
+
+      if (isAuthFail) {
+        warnOnce(
+          'auth-fail',
+          'Live updates are off — your session may have expired. Sign in again to restore real-time.',
+        );
+      } else if (hasConnectedRef.current) {
+        // Lost an established connection — let the user know they're stale.
+        warnOnce(
+          'lost',
+          "Live updates paused — we'll reconnect automatically.",
+          { description: ctx?.reason || `Code ${ctx?.code ?? 'unknown'}` }
+        );
+      }
     });
 
     centrifuge.on('error', (err) => {
-      // FIX: Catch transport errors gracefully — no unhandled rejection
       console.error('Centrifugo error:', err);
+      // Only surface to the user if we never managed to connect at all —
+      // otherwise the disconnected handler covers it.
+      if (!hasConnectedRef.current) {
+        warnOnce(
+          'transport-error',
+          "Live updates aren't available right now — refresh to see new content.",
+          { description: err?.message || 'Real-time transport error.' }
+        );
+      }
     });
 
     // Subscribe to personal notification channel

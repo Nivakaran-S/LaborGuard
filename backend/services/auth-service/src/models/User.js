@@ -73,6 +73,23 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    // Moderation (Phase 3.3)
+    // Active JWTs outlive suspension until refresh — accepted trade-off.
+    suspendedUntil: {
+        type: Date,
+        default: null
+    },
+    isBanned: {
+        type: Boolean,
+        default: false
+    },
+    moderationHistory: [{
+        action: { type: String, enum: ['warn', 'suspend', 'ban', 'lift'] },
+        reason: String,
+        by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        at: { type: Date, default: Date.now },
+        durationDays: Number
+    }],
     lastLogin: Date
 }, {
     timestamps: true

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, CheckCheck, Trash2, MessageSquare, FileText, Users, ChevronLeft, Filter } from "lucide-react";
+import { Bell, CheckCheck, Trash2, MessageSquare, FileText, Users, ChevronLeft, Filter, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Spinner } from "@/components/common/Spinner";
@@ -61,16 +61,25 @@ const NotificationsPage = () => {
               {unreadCount} new
             </span>
           )}
-          {unreadCount > 0 && (
+          <div className="ml-auto flex items-center gap-2">
+            {unreadCount > 0 && (
+              <button
+                onClick={() => markAllAsRead.mutate()}
+                disabled={markAllAsRead.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors text-xs font-black uppercase tracking-wide"
+              >
+                <CheckCheck className="h-3.5 w-3.5" />
+                Mark All Read
+              </button>
+            )}
             <button
-              onClick={() => markAllAsRead.mutate()}
-              disabled={markAllAsRead.isPending}
-              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors text-xs font-black uppercase tracking-wide"
+              onClick={() => navigate('/notifications/preferences')}
+              className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-500 flex items-center justify-center"
+              title="Preferences"
             >
-              <CheckCheck className="h-3.5 w-3.5" />
-              Mark All Read
+              <Settings className="h-4 w-4" />
             </button>
-          )}
+          </div>
         </div>
 
         {/* Filter tabs */}

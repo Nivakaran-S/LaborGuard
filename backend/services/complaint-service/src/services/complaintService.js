@@ -381,6 +381,107 @@ const addAttachment = async (complaintId, fileData, user) => {
   return complaint;
 };
 
+// ── NGO monitoring (N6/N7) ───────────────────────────────────────────────────
+
+/**
+ * NGO user adds a case to their organization's watch-list.
+ */
+const monitorComplaint = async (complaintId, ngoUserId) => {
+  const updated = await Complaint.findByIdAndUpdate(
+    complaintId,
+    { $addToSet: { monitoredByNGOs: ngoUserId } },
+    { new: true }
+  );
+  if (!updated) {
+    const error = new Error('Complaint not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  return updated;
+};
+
+/**
+ * NGO user removes a case from their watch-list.
+ */
+const unmonitorComplaint = async (complaintId, ngoUserId) => {
+  const updated = await Complaint.findByIdAndUpdate(
+    complaintId,
+    { $pull: { monitoredByNGOs: ngoUserId } },
+    { new: true }
+  );
+  if (!updated) {
+    const error = new Error('Complaint not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  return updated;
+};
+
+/**
+ * List complaints monitored by the calling NGO user.
+ */
+const getMonitoredComplaints = async (ngoUserId, queryParams) => {
+  const { page = 1, limit = 20, status, category } = queryParams;
+  const filter = { monitoredByNGOs: ngoUserId };
+  if (status) filter.status = status;
+  if (category) filter.category = category;
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [complaints, total] = await Promise.all([
+    Complaint.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .lean(),
+    Complaint.countDocuments(filter),
+  ]);
+
+  return {
+    complaints,
+    pagination: {
+      total, page: Number(page), limit: Number(limit),
+      totalPages: Math.ceil(total / Number(limit)),
+    },
+  };
+};
+
+/**
+ * NGO-scoped stats. Falls back to global stats when the NGO hasn't monitored
+ * anything yet (gives them a useful first-run view).
+ */
+const getNgoScopedStats = async (ngoUserId) => {
+  const scoped = { monitoredByNGOs: ngoUserId };
+  const total = await Complaint.countDocuments(scoped);
+
+  if (total === 0) {
+    return {
+      scope: 'global',
+      message: 'No monitored cases yet — showing global view. Add cases from Cases → Monitor.',
+      ...(await getComplaintStats()),
+      monitoredCount: 0,
+    };
+  }
+
+  const [byStatus, byCategory, byPriority, recent] = await Promise.all([
+    Complaint.aggregate([{ $match: scoped }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+    Complaint.aggregate([{ $match: scoped }, { $group: { _id: '$category', count: { $sum: 1 } } }]),
+    Complaint.aggregate([{ $match: scoped }, { $group: { _id: '$priority', count: { $sum: 1 } } }]),
+    Complaint.countDocuments({ ...scoped, createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }),
+  ]);
+
+  const format = (arr) => arr.reduce((acc, i) => { acc[i._id] = i.count; return acc; }, {});
+
+  return {
+    scope: 'ngo',
+    byStatus: format(byStatus),
+    byCategory: format(byCategory),
+    byPriority: format(byPriority),
+    recentComplaints: recent,
+    total,
+    monitoredCount: total,
+  };
+};
+
 module.exports = {
   createComplaint,
   getAllComplaints,
@@ -391,5 +492,9 @@ module.exports = {
   assignComplaint,
   deleteComplaint,
   getComplaintStats,
-  addAttachment
+  addAttachment,
+  monitorComplaint,
+  unmonitorComplaint,
+  getMonitoredComplaints,
+  getNgoScopedStats
 };

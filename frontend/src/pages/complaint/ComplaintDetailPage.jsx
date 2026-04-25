@@ -9,16 +9,17 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Clock, Building2, User, Tag,
-  CheckCircle2, XCircle, Loader2, MessageSquare, UserPlus, Trash2
+  CheckCircle2, XCircle, Loader2, MessageSquare, UserPlus, Trash2, Share2
 } from 'lucide-react';
 
-const STATUS_OPTIONS = ['pending', 'under_review', 'resolved', 'rejected'];
+const STATUS_OPTIONS = ['pending', 'under_review', 'in_progress', 'resolved', 'rejected'];
 
 const STATUS_CONFIG = {
-  pending:      { label: 'Pending',    cls: 'bg-amber-100 text-amber-700' },
-  under_review: { label: 'In Review',  cls: 'bg-blue-100 text-blue-700' },
-  resolved:     { label: 'Resolved',   cls: 'bg-green-100 text-green-700' },
-  rejected:     { label: 'Rejected',   cls: 'bg-red-100 text-red-700' },
+  pending:      { label: 'Pending',       cls: 'bg-amber-100 text-amber-700' },
+  under_review: { label: 'In Review',     cls: 'bg-blue-100 text-blue-700' },
+  in_progress:  { label: 'In Progress',   cls: 'bg-indigo-100 text-indigo-700' },
+  resolved:     { label: 'Resolved',      cls: 'bg-green-100 text-green-700' },
+  rejected:     { label: 'Rejected',      cls: 'bg-red-100 text-red-700' },
 };
 
 const ComplaintDetailPage = () => {
@@ -41,6 +42,10 @@ const ComplaintDetailPage = () => {
   // Delete dialog
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Share-to-community (Phase 5.1)
+  const [shareOpen, setShareOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const fetchComplaint = async () => {
     setLoading(true);
@@ -120,6 +125,24 @@ const ComplaintDetailPage = () => {
 
   const canUpdateStatus = ['admin', 'lawyer'].includes(user?.role);
   const isAdmin = user?.role === 'admin';
+  const isFiler = user?.userId && complaint?.workerId && String(complaint.workerId) === String(user.userId);
+  const canShareToCommunity = isFiler
+    && ['resolved', 'rejected'].includes(complaint?.status)
+    && !complaint?.sharedToCommunityAt;
+
+  const handleShareToCommunity = async () => {
+    setSharing(true);
+    try {
+      await complaintApi.shareToCommunity(id);
+      toast.success('Shared anonymously — identifying details were removed.');
+      setShareOpen(false);
+      await fetchComplaint();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to share');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -147,12 +170,25 @@ const ComplaintDetailPage = () => {
 
   return (
     <div className="max-w-4xl mx-auto p-6 md:p-10 space-y-8 animate-fade-in pb-20">
-      {/* Back */}
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-primary transition-colors">
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      {/* Back + Share row */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-primary transition-colors">
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+        {canShareToCommunity && (
+          <button
+            onClick={() => setShareOpen(true)}
+            className="flex items-center gap-2 text-xs font-black uppercase tracking-widest bg-teal-50 text-teal-700 hover:bg-teal-100 px-4 py-2 rounded-full transition-colors"
+          >
+            <Share2 className="h-3.5 w-3.5" /> Share Anonymously to Community
+          </button>
+        )}
+        {complaint?.sharedToCommunityAt && isFiler && (
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Already shared</span>
+        )}
+      </div>
 
       {error   && <Alert type="error"   message={error} />}
       {success && <Alert type="success" message={success} />}
@@ -315,6 +351,16 @@ const ComplaintDetailPage = () => {
         confirmLabel="Delete"
         variant="destructive"
         isLoading={deleting}
+      />
+
+      <ConfirmDialog
+        isOpen={shareOpen}
+        onClose={() => !sharing && setShareOpen(false)}
+        onConfirm={handleShareToCommunity}
+        title="Share anonymously to community?"
+        description={`We will publish your case title, description, category, and district to the community feed as an 'Anonymous Worker' post. Your name, employer name, city, and attachments will be stripped. This cannot be undone.`}
+        confirmLabel="Share Anonymously"
+        isLoading={sharing}
       />
     </div>
   );

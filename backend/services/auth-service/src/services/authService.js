@@ -90,7 +90,18 @@ const loginUser = async (email, password) => {
   const user = await User.findOne({ email }).select('+password');
   if (!user) throw { statusCode: 401, message: 'Invalid credentials' };
   if (!user.isActive) throw { statusCode: 403, message: 'Account is deactivated' };
-  
+  if (user.isBanned) {
+    throw { statusCode: 403, code: 'ACCOUNT_BANNED', message: 'This account has been permanently banned' };
+  }
+  if (user.suspendedUntil && user.suspendedUntil > new Date()) {
+    throw {
+      statusCode: 403,
+      code: 'ACCOUNT_SUSPENDED',
+      message: `Account suspended until ${user.suspendedUntil.toISOString()}`,
+      suspendedUntil: user.suspendedUntil,
+    };
+  }
+
   const isMatch = await comparePassword(password, user.password);
   if (!isMatch) throw { statusCode: 401, message: 'Invalid credentials' };
 

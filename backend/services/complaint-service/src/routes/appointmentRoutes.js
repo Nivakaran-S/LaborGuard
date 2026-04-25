@@ -12,6 +12,10 @@ const {
   listAppointmentRules
 } = require('../utils/validator');
 
+// POST /api/appointments/request — Worker requests an appointment (W20)
+// Must register BEFORE /:id to avoid conflict.
+router.post('/request', authenticate, authorize('worker'), appointmentController.requestAppointment);
+
 // GET /api/appointments/my
 router.get('/my', authenticate, authorize('worker'), listAppointmentRules, validate, appointmentController.getMyAppointments);
 
@@ -33,5 +37,8 @@ router.patch('/:id/reschedule', authenticate, authorize('admin', 'lawyer'), vali
 // PATCH /api/appointments/:id/cancel
 // [FIX] Workers can cancel their own appointments — was authorize('admin') only
 router.patch('/:id/cancel', authenticate, authorize('admin', 'worker'), validateObjectId, cancelAppointmentRules, validate, appointmentController.cancelAppointment);
+
+// PATCH /api/appointments/:id/outcome — Lawyer records post-meeting notes (L5)
+router.patch('/:id/outcome', authenticate, authorize('lawyer', 'admin'), validateObjectId, validate, appointmentController.recordAppointmentOutcome);
 
 module.exports = router;

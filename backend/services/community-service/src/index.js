@@ -9,6 +9,7 @@ const { Kafka } = require('kafkajs');
 const cors = require('cors');
 const helmet = require('helmet');
 const UserProfile = require('./models/UserProfile');
+const Post = require('./models/Post');
 
 const app = express();
 
@@ -65,6 +66,7 @@ const connectKafka = async () => {
 
         await consumer.subscribe({ topic: 'community-events', fromBeginning: false });
         await consumer.subscribe({ topic: 'auth-events', fromBeginning: false });
+        await consumer.subscribe({ topic: 'complaint-events', fromBeginning: false });
 
         await consumer.run({
             eachMessage: async ({ topic, partition, message }) => {
@@ -75,13 +77,53 @@ const connectKafka = async () => {
                     const event = JSON.parse(msgValue);
                     if (topic === 'auth-events' && event.type === 'user_registered') {
                         const { userId, name, role } = event.payload;
+                        const normalizedRole = role === 'ngo_representative' ? 'ngo' : role;
 
                         let profile = await UserProfile.findOne({ userId });
                         if (!profile) {
-                            profile = new UserProfile({ userId, name, role });
+                            profile = new UserProfile({ userId, name, role: normalizedRole });
                             await profile.save();
                             console.log(`[${SERVICE_NAME}] Created profile for user ${userId}`);
                         }
+                    }
+
+                    // Phase 5.1: Anonymous complaint share → create Post attributed to a
+                    // shared "Anonymous Worker" system account (fixed authorId).
+                    if (topic === 'complaint-events' && event.type === 'complaint_shared_to_community') {
+                        const { title, description, category, district, complaintId } = event.payload;
+                        const ANON_ID = 'anon-community';
+
+                        // Ensure the system profile exists.
+                        await UserProfile.findOneAndUpdate(
+                            { userId: ANON_ID },
+                            {
+                                $setOnInsert: {
+                                    userId: ANON_ID,
+                                    name: 'Anonymous Worker',
+                                    role: 'worker',
+                                    isPrivate: false,
+                                    avatarUrl: '',
+                                    bio: 'Shared labour case — identifying details removed for privacy',
+                                },
+                            },
+                            { upsert: true, new: true, setDefaultsOnInsert: true }
+                        );
+
+                        const disclaimer = '[Shared from a filed case — identifying details removed]\n\n';
+                        const content = disclaimer + (title ? `${title}\n\n` : '') + (description || '');
+                        const hashtags = [category].filter(Boolean);
+                        if (district) hashtags.push(district.replace(/\s+/g, ''));
+
+                        await Post.create({
+                            authorId: ANON_ID,
+                            authorName: 'Anonymous Worker',
+                            authorAvatar: '',
+                            authorRole: 'worker',
+                            content,
+                            hashtags,
+                            mediaUrls: [],
+                        });
+                        console.log(`[${SERVICE_NAME}] Created anonymous community post from complaint ${complaintId}`);
                     }
                 } catch (err) {
                     console.error(`[${SERVICE_NAME}] Error processing message:`, err.message);
@@ -115,6 +157,8 @@ const postRoutes = require('./routes/postRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 const statusRoutes = require('./routes/statusRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const campaignRoutes = require('./routes/campaignRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 // Swagger API Docs
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
@@ -125,6 +169,8 @@ app.use('/api/posts', postRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/statuses', statusRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/campaigns', campaignRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 const startServer = async () => {
     await connectMongoDB();

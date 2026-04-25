@@ -19,6 +19,7 @@ export const complaintApi = {
   getStats:          ()              => complaintClient.get('/complaints/stats'),
   // FIX: added — useComplaints hook calls complaintApi.downloadReport(complaintId)
   downloadReport:    (id)            => complaintClient.get(`/complaints/${id}/report`, { responseType: 'blob' }),
+  shareToCommunity:  (id)            => complaintClient.post(`/complaints/${id}/share-to-community`),
 
   // Appointments (co-located in complaint-service, mounted at /api/appointments)
   // FIX: added — useComplaints hook calls complaintApi.getMyAppointments(params) but old file had no such method
@@ -32,4 +33,22 @@ export const complaintApi = {
   rescheduleAppointment:   (id, data)         => complaintClient.patch(`/appointments/${id}/reschedule`, data),
   // FIX: added — useComplaints hook calls complaintApi.cancelAppointment(id, { reason })
   cancelAppointment:       (id, data)         => complaintClient.patch(`/appointments/${id}/cancel`, data),
+
+  // Worker requests appointment for a specific complaint (W20)
+  requestAppointment:      (data)             => complaintClient.post('/appointments/request', data),
+
+  // Lawyer records post-meeting outcome (L5)
+  recordAppointmentOutcome:(id, data)         => complaintClient.patch(`/appointments/${id}/outcome`, data),
+
+  // NGO impact PDF report (N9)
+  downloadNgoReport:       (params)           => complaintClient.get('/complaints/ngo-report', {
+    params,
+    responseType: 'blob',
+  }),
+
+  // NGO org-scoped endpoints (N6/N7)
+  getMonitoredComplaints:  (params)           => complaintClient.get('/complaints/ngo/monitored', { params }),
+  getNgoScopedStats:       ()                 => complaintClient.get('/complaints/ngo/stats'),
+  monitorComplaint:        (id)               => complaintClient.post(`/complaints/${id}/monitor`),
+  unmonitorComplaint:      (id)               => complaintClient.post(`/complaints/${id}/unmonitor`),
 };

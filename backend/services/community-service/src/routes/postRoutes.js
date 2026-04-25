@@ -8,9 +8,13 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 router.use(protect);
 
-router.get('/feed/:userId',  postController.getFeed);
-router.get('/trending',      postController.getTrendingFeed);
-router.get('/hashtag/:tag',  postController.searchByHashtag);
+// Static paths and search MUST register BEFORE `/:postId` so Express doesn't
+// mistake them for a post id.
+router.get('/feed/:userId',    postController.getFeed);
+router.get('/trending',        postController.getTrendingFeed);
+router.get('/search',          postController.searchPosts);
+router.get('/hashtag/:tag',    postController.searchByHashtag);
+router.get('/author/:userId',  postController.getPostsByAuthor);
 
 router.post('/',
     upload.array('media', 5),
@@ -19,9 +23,10 @@ router.post('/',
     postController.createPost
 );
 
-router.get('/:postId',    postController.getPostById);
-router.put('/:postId',    upload.array('media', 5), moderateImages, moderateContent, postController.updatePost);
-router.delete('/:postId', postController.deletePost);
+router.get('/:postId',         postController.getPostById);
+router.get('/:postId/likers',  postController.getPostLikers);
+router.put('/:postId',         upload.array('media', 5), moderateImages, moderateContent, postController.updatePost);
+router.delete('/:postId',      postController.deletePost);
 
 router.post('/:postId/like',   postController.likePost);
 router.post('/:postId/share',  postController.sharePost);

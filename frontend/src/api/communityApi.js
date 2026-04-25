@@ -57,22 +57,30 @@ export const communityApi = {
   reportPost: (postId, reason) =>
     communityClient.post(`/posts/${postId}/report`, { reason }),
 
+  getPostLikers: (postId) =>
+    communityClient.get(`/posts/${postId}/likers`),
+
+  getPostsByAuthor: (userId, page = 1, limit = 20) =>
+    communityClient.get(`/posts/author/${userId}`, { params: { page, limit } }),
+
+  searchPosts: (q, page = 1, limit = 20) =>
+    communityClient.get('/posts/search', { params: { q, page, limit } }),
+
 
   // ══ COMMENTS ════════════════════════════════════════════════════════════
 
-  // [FIX] was POST /posts/:postId/comments — wrong. Backend: POST /comments/:postId
-  addComment: (postId, content) =>
-    communityClient.post(`/comments/${postId}`, { content }),
+  addComment: (postId, content, parentCommentId) =>
+    communityClient.post(`/comments/${postId}`, { content, parentCommentId }),
 
-  // [ADDED] was missing
   getComments: (postId, page = 1, limit = 20) =>
     communityClient.get(`/comments/${postId}`, { params: { page, limit } }),
 
-  // [ADDED] was missing
+  updateComment: (commentId, content) =>
+    communityClient.patch(`/comments/${commentId}`, { content }),
+
   deleteComment: (commentId) =>
     communityClient.delete(`/comments/${commentId}`),
 
-  // [ADDED] was missing
   reportComment: (commentId, reason) =>
     communityClient.post(`/comments/${commentId}/report`, { reason }),
 
@@ -82,25 +90,36 @@ export const communityApi = {
   getProfile: (userId) =>
     communityClient.get(`/profiles/${userId}`),
 
-  // [FIX] was PATCH /profiles/me — wrong. Backend: POST /profiles
+  getProfileStats: (userId) =>
+    communityClient.get(`/profiles/${userId}/stats`),
+
+  searchProfiles: (q, role) =>
+    communityClient.get('/profiles/search', { params: { q, role } }),
+
   createOrUpdateProfile: (data) =>
     communityClient.post('/profiles', data),
 
-  // [ADDED] was missing
   followUser: (targetUserId) =>
     communityClient.post('/profiles/follow', { targetUserId }),
 
-  // [ADDED] was missing
   unfollowUser: (targetUserId) =>
     communityClient.post('/profiles/unfollow', { targetUserId }),
 
-  // [ADDED] was missing
   toggleBookmark: (postId) =>
     communityClient.post('/profiles/bookmark', { postId }),
 
-  // [ADDED] was missing
   getBookmarks: (userId, page = 1, limit = 20) =>
     communityClient.get(`/profiles/${userId}/bookmarks`, { params: { page, limit } }),
+
+  // Follow requests (Phase 4.2)
+  getIncomingFollowRequests: () =>
+    communityClient.get('/profiles/requests/incoming'),
+
+  approveFollowRequest: (requestId) =>
+    communityClient.post(`/profiles/requests/${requestId}/approve`),
+
+  rejectFollowRequest: (requestId) =>
+    communityClient.post(`/profiles/requests/${requestId}/reject`),
 
 
   // ══ STATUSES ════════════════════════════════════════════════════════════

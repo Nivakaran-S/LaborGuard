@@ -4,8 +4,9 @@ import { useJobs } from "@/hooks/useJobs";
 import {
   Users, ChevronLeft, Clock, CheckCircle2, XCircle,
   FileText, BadgeCheck, MessageSquare, Briefcase,
-  ArrowRight, TrendingDown,
+  ArrowRight, TrendingDown, Download,
 } from "lucide-react";
+import { jobApi } from "@/api/jobApi";
 import { Button } from "@/components/common/Button";
 import { Badge } from "@/components/common/Badge";
 import { Spinner } from "@/components/common/Spinner";
@@ -24,6 +25,27 @@ const JobApplicantsPage = () => {
 
   const { data: job, isLoading: jobLoading } = useGetJob(id);
   const { data: applicants, isLoading: appsLoading } = useGetJobApplications(id);
+  const [downloadingReport, setDownloadingReport] = useState(false);
+
+  const handleDownloadReport = async () => {
+    setDownloadingReport(true);
+    try {
+      const res = await jobApi.downloadJobReport(id);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const safe = (job?.title || 'job').replace(/[^a-z0-9-_]/gi, '_').slice(0, 60);
+      a.download = `${safe}-report.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Report downloaded');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to download report');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
 
   // FIX: Modal state now properly tracks which applicant + which action
   const [activeAction, setActiveAction] = useState(null); // { appId, status }
@@ -124,6 +146,15 @@ const JobApplicantsPage = () => {
               {job?.title}
             </p>
           </div>
+          <Button
+            onClick={handleDownloadReport}
+            disabled={downloadingReport || jobLoading}
+            variant="outline"
+            className="h-12 px-6 rounded-full font-black uppercase tracking-widest text-[10px] border-2"
+          >
+            <Download className="h-3.5 w-3.5 mr-2" />
+            {downloadingReport ? 'Generating…' : 'Download Report'}
+          </Button>
         </div>
       </header>
 

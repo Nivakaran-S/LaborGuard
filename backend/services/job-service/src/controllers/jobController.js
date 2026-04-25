@@ -2,7 +2,7 @@ const Job = require('../models/Job');
 const Application = require('../models/Application');
 const { sendApplicationStatusEmail } = require('../services/emailService');
 const { generateEmploymentContract } = require('../services/aiContractService');
-const { generatePdfContract } = require('../services/pdfService');
+const { generatePdfContract, generateJobReport } = require('../services/pdfService');
 
 // @desc    Create a new Job Posting
 // @route   POST /api/jobs
@@ -331,6 +331,36 @@ const getEmployerJobs = async (req, res, next) => {
     }
 };
 
+// @desc    Employer downloads a PDF report for a job (job + applicants summary)
+// @route   GET /api/jobs/:id/report
+// @access  Private/Employer (owner) or Admin
+const downloadJobReport = async (req, res, next) => {
+    try {
+        const job = await Job.findById(req.params.id).lean();
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+
+        const isOwner = job.employerId?.toString() === req.user.userId;
+        const isAdmin = req.user.role === 'admin';
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ success: false, message: 'Not authorized to download this report' });
+        }
+
+        const applications = await Application.find({ jobId: job._id }).sort({ appliedDate: -1 }).lean();
+
+        const pdf = await generateJobReport(job, applications);
+        if (!pdf) {
+            return res.status(500).json({ success: false, message: 'Failed to generate report' });
+        }
+
+        const safeTitle = (job.title || 'job').replace(/[^a-z0-9-_]/gi, '_').slice(0, 60);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}-report.pdf"`);
+        res.send(pdf);
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = { getEmployerJobs,
     createJob,
     getJobs,
@@ -341,5 +371,6 @@ module.exports = { getEmployerJobs,
     getWorkerApplications,
     getEmployerApplications,
     updateApplicationStatus,
-    getJobApplications
+    getJobApplications,
+    downloadJobReport
 };

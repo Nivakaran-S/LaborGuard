@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { appointmentApi } from "@/api/appointmentApi";
+import { complaintApi } from "@/api/complaintApi";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -37,6 +38,38 @@ const LegalAppointments = () => {
     const [statusFilter, setStatusFilter] = useState("all");
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [reschedulingApt, setReschedulingApt] = useState(null);
+    const [outcomeApt, setOutcomeApt] = useState(null);
+    const [outcomeText, setOutcomeText] = useState("");
+    const [markCompleted, setMarkCompleted] = useState(true);
+    const [savingOutcome, setSavingOutcome] = useState(false);
+
+    const openOutcomeModal = (apt) => {
+        setOutcomeApt(apt);
+        setOutcomeText(apt.outcomeNotes || "");
+        setMarkCompleted(apt.status !== 'completed');
+    };
+
+    const submitOutcome = async () => {
+        if (!outcomeText.trim()) {
+            toast.error('Please describe the meeting outcome.');
+            return;
+        }
+        setSavingOutcome(true);
+        try {
+            await complaintApi.recordAppointmentOutcome(outcomeApt._id, {
+                outcomeNotes: outcomeText.trim(),
+                markCompleted,
+            });
+            toast.success('Outcome recorded');
+            setOutcomeApt(null);
+            setOutcomeText("");
+            refetch();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to record outcome');
+        } finally {
+            setSavingOutcome(false);
+        }
+    };
 
     const { data: rawAppointments = [], isLoading, refetch } = useQuery({
         queryKey: ['legal-appointments', user?.userId],
@@ -244,6 +277,22 @@ const LegalAppointments = () => {
                                                 Reschedule
                                             </Button>
                                         )}
+                                        {apt.status !== 'cancelled' && (
+                                            <Button
+                                                onClick={() => openOutcomeModal(apt)}
+                                                variant="ghost"
+                                                className={cn(
+                                                    "h-16 px-6 rounded-full font-black uppercase tracking-widest text-[10px] transition-all",
+                                                    apt.outcomeNotes
+                                                        ? "bg-green-50 text-green-700 hover:bg-green-100"
+                                                        : "bg-slate-50 hover:bg-primary/5 text-primary"
+                                                )}
+                                                title={apt.outcomeNotes ? "Edit outcome notes" : "Record outcome"}
+                                            >
+                                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                                {apt.outcomeNotes ? 'Edit Outcome' : 'Record Outcome'}
+                                            </Button>
+                                        )}
                                         <Button
                                             onClick={() => apt.complaintId && navigate(`/legal/cases/${apt.complaintId}`)}
                                             variant="ghost"
@@ -272,6 +321,62 @@ const LegalAppointments = () => {
                 onClose={() => setReschedulingApt(null)}
                 onRescheduled={refetch}
             />
+
+            {outcomeApt && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+                    onClick={() => !savingOutcome && setOutcomeApt(null)}
+                >
+                    <div
+                        className="w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-6 py-4 border-b border-slate-100">
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Meeting Outcome</h3>
+                            <p className="text-xs text-slate-400 mt-1">
+                                Record what was discussed, agreed, and any next steps.
+                            </p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <textarea
+                                value={outcomeText}
+                                onChange={(e) => setOutcomeText(e.target.value.slice(0, 2000))}
+                                rows={8}
+                                maxLength={2000}
+                                placeholder="Summarize the meeting — key points, worker concerns, agreed actions, next steps…"
+                                className="w-full bg-slate-50 rounded-2xl p-4 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+                            />
+                            <p className="text-[10px] text-slate-400 text-right">{outcomeText.length}/2000</p>
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={markCompleted}
+                                    onChange={(e) => setMarkCompleted(e.target.checked)}
+                                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                                />
+                                <span className="text-xs font-bold text-slate-600">Mark appointment as completed</span>
+                            </label>
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2">
+                            <Button
+                                variant="ghost"
+                                onClick={() => setOutcomeApt(null)}
+                                disabled={savingOutcome}
+                                className="rounded-full text-xs font-black uppercase tracking-widest"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={submitOutcome}
+                                disabled={savingOutcome || !outcomeText.trim()}
+                                className="h-10 px-6 rounded-full font-black uppercase tracking-widest text-[11px]"
+                            >
+                                {savingOutcome ? 'Saving…' : 'Save Outcome'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

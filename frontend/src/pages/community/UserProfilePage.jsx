@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ChevronLeft, Grid3X3, Heart, Settings, UserPlus, UserCheck,
-  MapPin, ShieldCheck, MessageCircle,
+  ShieldCheck, MessageCircle, Lock, Clock,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/common/Avatar";
 import { Badge } from "@/components/common/Badge";
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 const ROLE_CONFIG = {
   worker: { label: "Worker", color: "bg-teal-50 text-teal-700" },
   lawyer: { label: "Legal Officer", color: "bg-blue-50 text-blue-700" },
+  ngo: { label: "NGO Representative", color: "bg-purple-50 text-purple-700" },
   ngo_representative: { label: "NGO Representative", color: "bg-purple-50 text-purple-700" },
   employer: { label: "Employer", color: "bg-orange-50 text-orange-700" },
   admin: { label: "Administrator", color: "bg-slate-100 text-slate-700" },
@@ -26,25 +27,45 @@ const UserProfilePage = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
-  const { useGetProfile, followUser, unfollowUser } = useCommunity();
+  const {
+    useGetProfile, useGetProfileStats, useGetPostsByAuthor,
+    followUser, unfollowUser,
+    likePost, sharePost, toggleBookmark, deletePost, reportPost, votePoll,
+  } = useCommunity();
 
   const { data: profile, isLoading: profileLoading } = useGetProfile(userId);
-  const [following, setFollowing] = useState(false);
-  const [selectedPost, setSelectedPost] = useState(null);
+  const { data: stats } = useGetProfileStats(userId);
   const [activeTab, setActiveTab] = useState("posts");
+  const { data: authorPosts = [], isLoading: postsLoading, error: postsError } = useGetPostsByAuthor(userId);
+
+  const [selectedPost, setSelectedPost] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [following, setFollowing] = useState(false);
+  const [followPending, setFollowPending] = useState(false);
 
   const isMe = userId === currentUser?.userId;
   const roleInfo = ROLE_CONFIG[profile?.role] || ROLE_CONFIG.worker;
+
+  useEffect(() => {
+    if (profile && currentUser) {
+      setFollowing(Boolean(profile.followers?.includes(currentUser.userId)));
+    }
+  }, [profile, currentUser]);
 
   const handleFollow = () => {
     if (following) {
       setFollowing(false);
       unfollowUser.mutate(userId);
-    } else {
-      setFollowing(true);
-      followUser.mutate(userId);
+      return;
     }
+    // Private profile → enters pending state (backend will create FollowRequest)
+    if (profile?.isPrivate) {
+      setFollowPending(true);
+      followUser.mutate(userId);
+      return;
+    }
+    setFollowing(true);
+    followUser.mutate(userId);
   };
 
   if (profileLoading) {
@@ -75,9 +96,15 @@ const UserProfilePage = () => {
   const displayName = profile.name || `User ${profile.userId?.slice(-4)}`;
   const initial = displayName.charAt(0).toUpperCase();
 
+  const statPostCount = stats?.postCount ?? authorPosts.length;
+  const statFollowers = stats?.followers ?? profile.followers?.length ?? 0;
+  const statFollowing = stats?.following ?? profile.following?.length ?? 0;
+  const statTotalLikes = stats?.totalLikes ?? 0;
+
+  const isPrivateBlocked = profile.isPrivate && !isMe && !following;
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Back nav */}
       <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3">
         <button
           onClick={() => navigate(-1)}
@@ -89,9 +116,7 @@ const UserProfilePage = () => {
       </div>
 
       <div className="max-w-2xl mx-auto">
-        {/* Profile header */}
         <div className="bg-white pt-8 pb-5 px-6 flex flex-col items-center text-center border-b border-slate-100">
-          {/* Avatar */}
           <div className="relative mb-4">
             <div className="p-1 rounded-full bg-gradient-to-br from-teal-400 to-emerald-500">
               <div className="p-0.5 bg-white rounded-full">
@@ -110,34 +135,40 @@ const UserProfilePage = () => {
             )}
           </div>
 
-          <h1 className="text-xl font-black text-slate-900">{displayName}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-black text-slate-900">{displayName}</h1>
+            {profile.isPrivate && <Lock className="h-3.5 w-3.5 text-slate-400" />}
+          </div>
           <Badge className={cn("border-none text-[10px] font-black uppercase tracking-wide mt-1.5", roleInfo.color)}>
             {roleInfo.label}
           </Badge>
 
-          {profile.bio && (
+          {profile.bio && !profile.hiddenFields?.includes("bio") && (
             <p className="text-sm text-slate-600 font-medium mt-3 max-w-xs leading-relaxed">{profile.bio}</p>
           )}
 
-          {/* Stats */}
           <div className="flex items-center gap-8 mt-5">
             <div className="text-center">
-              <p className="text-xl font-black text-slate-900">{profile.followers?.length || 0}</p>
+              <p className="text-xl font-black text-slate-900">{statPostCount}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Posts</p>
+            </div>
+            <div className="w-px h-8 bg-slate-100" />
+            <div className="text-center">
+              <p className="text-xl font-black text-slate-900">{statTotalLikes}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Likes</p>
+            </div>
+            <div className="w-px h-8 bg-slate-100" />
+            <div className="text-center">
+              <p className="text-xl font-black text-slate-900">{statFollowers}</p>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Followers</p>
             </div>
             <div className="w-px h-8 bg-slate-100" />
             <div className="text-center">
-              <p className="text-xl font-black text-slate-900">{profile.following?.length || 0}</p>
+              <p className="text-xl font-black text-slate-900">{statFollowing}</p>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Following</p>
-            </div>
-            <div className="w-px h-8 bg-slate-100" />
-            <div className="text-center">
-              <p className="text-xl font-black text-slate-900">{profile.bookmarks?.length || 0}</p>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Bookmarks</p>
             </div>
           </div>
 
-          {/* Action buttons */}
           <div className="flex items-center gap-3 mt-5 w-full max-w-xs">
             {isMe ? (
               <button
@@ -151,15 +182,21 @@ const UserProfilePage = () => {
               <>
                 <button
                   onClick={handleFollow}
+                  disabled={followPending}
                   className={cn(
                     "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide transition-all",
                     following
                       ? "bg-slate-100 text-slate-700 hover:bg-red-50 hover:text-red-500"
+                      : followPending
+                      ? "bg-amber-50 text-amber-700"
                       : "bg-teal-500 text-white hover:bg-teal-600 shadow-sm"
                   )}
                 >
-                  {following ? <UserCheck className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
-                  {following ? "Following" : "Follow"}
+                  {followPending ? <Clock className="h-3.5 w-3.5" />
+                    : following ? <UserCheck className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
+                  {followPending ? "Requested"
+                    : following ? "Following"
+                    : profile.isPrivate ? "Request to Follow" : "Follow"}
                 </button>
                 <button
                   onClick={() => navigate(`/messages?userId=${userId}`)}
@@ -173,7 +210,6 @@ const UserProfilePage = () => {
           </div>
         </div>
 
-        {/* Tab bar */}
         <div className="bg-white border-b border-slate-100 flex">
           {[{ id: "posts", icon: Grid3X3, label: "Posts" }].map(({ id, icon: Icon, label }) => (
             <button
@@ -192,13 +228,39 @@ const UserProfilePage = () => {
           ))}
         </div>
 
-        {/* Posts — Note: backend doesn't have GET /posts/user/:userId yet, show empty state */}
         <div className="p-4 space-y-4">
-          <div className="bg-white rounded-2xl border border-dashed border-slate-200 py-16 text-center">
-            <Grid3X3 className="h-12 w-12 text-slate-200 mx-auto mb-3" />
-            <p className="font-bold text-slate-500">Posts from this user will appear here</p>
-            <p className="text-xs text-slate-400 mt-1">This feature requires a backend endpoint: GET /posts/author/:userId</p>
-          </div>
+          {isPrivateBlocked ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-200 py-16 text-center">
+              <Lock className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+              <p className="font-bold text-slate-600">This account is private</p>
+              <p className="text-xs text-slate-400 mt-1">Follow to see their posts</p>
+            </div>
+          ) : postsLoading ? (
+            <div className="flex justify-center py-10"><Spinner /></div>
+          ) : postsError ? (
+            <div className="bg-white rounded-2xl border border-dashed border-red-200 py-10 text-center">
+              <p className="text-sm font-bold text-red-400">Unable to load posts</p>
+            </div>
+          ) : authorPosts.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-200 py-16 text-center">
+              <Grid3X3 className="h-12 w-12 text-slate-200 mx-auto mb-3" />
+              <p className="font-bold text-slate-500">No posts yet</p>
+            </div>
+          ) : (
+            authorPosts.map((post) => (
+              <CommunityPostCard
+                key={post._id}
+                post={post}
+                onLike={(id) => likePost.mutate(id)}
+                onComment={setSelectedPost}
+                onShare={(id) => sharePost.mutate(id)}
+                onBookmark={(id) => toggleBookmark.mutate(id)}
+                onDelete={(id) => deletePost.mutate(id)}
+                onReport={(id) => reportPost.mutate({ postId: id, reason: "Inappropriate content" })}
+                onVote={(id, optionIndex) => votePoll.mutate({ postId: id, optionIndex })}
+              />
+            ))
+          )}
         </div>
       </div>
 

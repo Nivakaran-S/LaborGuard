@@ -74,7 +74,7 @@ const complaintSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'under_review', 'resolved', 'rejected'],
+      enum: ['pending', 'under_review', 'in_progress', 'resolved', 'rejected'],
       default: 'pending'
     },
     priority: {
@@ -131,10 +131,23 @@ const complaintSchema = new mongoose.Schema(
     isAnonymous: {
       type: Boolean,
       default: false
-    }
+    },
+    // Phase 5.1: prevents double-sharing a single case to community
+    sharedToCommunityAt: {
+      type: Date,
+      default: null
+    },
+    // NGO monitoring (N6/N7): NGO user IDs who are actively monitoring this case.
+    // We don't have a separate Organization model — each NGO user represents
+    // their own organization. When an NGO adds a case to their watch-list it
+    // lands here.
+    monitoredByNGOs: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }]
   },
   {
-    timestamps: true 
+    timestamps: true
   }
 );
 
@@ -143,5 +156,6 @@ complaintSchema.index({ workerId: 1 });
 complaintSchema.index({ status: 1 });
 complaintSchema.index({ category: 1 });
 complaintSchema.index({ assignedTo: 1 });
+complaintSchema.index({ monitoredByNGOs: 1 });
 
 module.exports = mongoose.model('Complaint', complaintSchema);

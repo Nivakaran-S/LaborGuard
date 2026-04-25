@@ -100,6 +100,62 @@ export const useCommunity = () => {
         enabled: !!user?.userId,
     });
 
+    // ── Phase 2 additions ────────────────────────────────────────────────────
+    const useGetPostLikers = (postId) => useQuery({
+        queryKey: ['community-likers', postId],
+        queryFn: async () => {
+            const res = await communityApi.getPostLikers(postId);
+            return res.data || [];
+        },
+        enabled: !!postId,
+    });
+
+    const useGetPostsByAuthor = (userId, page = 1) => useQuery({
+        queryKey: ['community-author-posts', userId, page],
+        queryFn: async () => {
+            const res = await communityApi.getPostsByAuthor(userId, page);
+            return res.data || [];
+        },
+        enabled: !!userId,
+    });
+
+    const useGetProfileStats = (userId) => useQuery({
+        queryKey: ['community-profile-stats', userId],
+        queryFn: async () => {
+            const res = await communityApi.getProfileStats(userId);
+            return res.data;
+        },
+        enabled: !!userId,
+    });
+
+    const useSearchPosts = (q, page = 1) => useQuery({
+        queryKey: ['community-search-posts', q, page],
+        queryFn: async () => {
+            if (!q || q.length < 2) return [];
+            const res = await communityApi.searchPosts(q, page);
+            return res.data || [];
+        },
+        enabled: !!q && q.length >= 2,
+    });
+
+    const useSearchProfiles = (q, role) => useQuery({
+        queryKey: ['community-search-profiles', q, role],
+        queryFn: async () => {
+            if (!q || q.length < 2) return [];
+            const res = await communityApi.searchProfiles(q, role);
+            return res.data || [];
+        },
+        enabled: !!q && q.length >= 2,
+    });
+
+    const useGetFollowRequests = () => useQuery({
+        queryKey: ['community-follow-requests'],
+        queryFn: async () => {
+            const res = await communityApi.getIncomingFollowRequests();
+            return res.data || [];
+        },
+    });
+
     // ── Mutations ────────────────────────────────────────────────────────────
 
     const createPost = useMutation({
@@ -122,11 +178,23 @@ export const useCommunity = () => {
 
     const likePost = useMutation({
         mutationFn: (postId) => communityApi.likePost(postId),
+        onSuccess: (_, postId) => {
+            queryClient.invalidateQueries({ queryKey: ['community-feed'] });
+            queryClient.invalidateQueries({ queryKey: ['community-trending'] });
+            queryClient.invalidateQueries({ queryKey: ['community-likers', postId] });
+        },
+        onError: (err) => toast.error(err.response?.data?.message || "Failed to like post"),
+    });
+
+    const editPost = useMutation({
+        mutationFn: ({ postId, formData }) => communityApi.updatePost(postId, formData),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['community-feed'] });
             queryClient.invalidateQueries({ queryKey: ['community-trending'] });
+            queryClient.invalidateQueries({ queryKey: ['community-author-posts'] });
+            toast.success("Post updated");
         },
-        onError: (err) => toast.error(err.response?.data?.message || "Failed to like post"),
+        onError: (err) => toast.error(err.response?.data?.message || "Failed to update post"),
     });
 
     const sharePost = useMutation({
@@ -157,12 +225,22 @@ export const useCommunity = () => {
     });
 
     const addComment = useMutation({
-        mutationFn: ({ postId, content }) => communityApi.addComment(postId, content),
+        mutationFn: ({ postId, content, parentCommentId }) =>
+            communityApi.addComment(postId, content, parentCommentId),
         onSuccess: (_, { postId }) => {
             queryClient.invalidateQueries({ queryKey: ['community-comments', postId] });
             toast.success("Comment added!");
         },
         onError: (err) => toast.error(err.response?.data?.message || "Failed to add comment"),
+    });
+
+    const editComment = useMutation({
+        mutationFn: ({ commentId, content }) => communityApi.updateComment(commentId, content),
+        onSuccess: (_, { postId }) => {
+            queryClient.invalidateQueries({ queryKey: ['community-comments', postId] });
+            toast.success("Comment updated");
+        },
+        onError: (err) => toast.error(err.response?.data?.message || "Failed to update comment"),
     });
 
     const deleteComment = useMutation({
@@ -221,15 +299,37 @@ export const useCommunity = () => {
         onError: (err) => toast.error(err.response?.data?.message || "Failed to delete status"),
     });
 
+    const approveFollowRequest = useMutation({
+        mutationFn: (requestId) => communityApi.approveFollowRequest(requestId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['community-follow-requests'] });
+            queryClient.invalidateQueries({ queryKey: ['community-profile'] });
+            toast.success("Follow request approved");
+        },
+        onError: (err) => toast.error(err.response?.data?.message || "Failed to approve request"),
+    });
+
+    const rejectFollowRequest = useMutation({
+        mutationFn: (requestId) => communityApi.rejectFollowRequest(requestId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['community-follow-requests'] });
+            toast.success("Follow request rejected");
+        },
+        onError: (err) => toast.error(err.response?.data?.message || "Failed to reject request"),
+    });
+
     return {
         // Queries
         useGetPosts, useGetFeed, useGetTrending, useGetPolls,
         useSearchByHashtag, useGetComments, useGetProfile,
         useGetBookmarks, useGetStatuses,
+        useGetPostLikers, useGetPostsByAuthor, useGetProfileStats,
+        useSearchPosts, useSearchProfiles, useGetFollowRequests,
         // Mutations
-        createPost, deletePost, likePost, sharePost,
-        votePoll, reportPost, addComment, deleteComment,
+        createPost, deletePost, editPost, likePost, sharePost,
+        votePoll, reportPost, addComment, editComment, deleteComment,
         followUser, unfollowUser, toggleBookmark,
         createStatus, deleteStatus,
+        approveFollowRequest, rejectFollowRequest,
     };
 };

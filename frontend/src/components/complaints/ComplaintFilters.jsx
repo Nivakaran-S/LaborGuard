@@ -4,6 +4,7 @@ const STATUS_OPTIONS = [
   { value: '',             label: 'All Statuses' },
   { value: 'pending',      label: 'Pending' },
   { value: 'under_review', label: 'Under Review' },
+  { value: 'in_progress',  label: 'In Progress' },
   { value: 'resolved',     label: 'Resolved' },
   { value: 'rejected',     label: 'Rejected' },
 ];

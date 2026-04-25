@@ -27,14 +27,18 @@ import { Badge } from "@/components/common/Badge";
 import { Card, CardContent } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import { useCommunity } from "@/hooks/useCommunity";
+import { useCampaigns } from "@/hooks/useCampaigns";
 import { StoryCard } from "@/components/community/StoryCard";
 import { toast } from "sonner";
 
 const AdvocacyHub = () => {
     const navigate = useNavigate();
     const { useGetTrending, likePost, sharePost } = useCommunity();
+    const { useGetCampaigns } = useCampaigns();
     const { data: trending = [] } = useGetTrending();
+    const { data: activeCampaigns = [] } = useGetCampaigns({ status: 'active', sort: 'trending' });
     const featuredStories = trending.slice(0, 3);
+    const topCampaigns = activeCampaigns.slice(0, 3);
 
     const handleRegionalComparison = () => {
         navigate("/community/explore");
@@ -256,6 +260,59 @@ const AdvocacyHub = () => {
                       onShare={(id) => sharePost.mutate(id)}
                     />
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Active Campaigns (real data from Campaign backend) */}
+            {topCampaigns.length > 0 && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Active Campaigns</h2>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Collective action — join any campaign</p>
+                  </div>
+                  <Button
+                    onClick={() => navigate('/community/campaigns')}
+                    variant="outline"
+                    className="h-12 px-6 rounded-full font-black uppercase tracking-widest text-[10px]"
+                  >
+                    View All
+                    <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {topCampaigns.map((c) => {
+                    const percent = c.targetGoal > 0 ? Math.min(100, Math.round((c.supportersCount / c.targetGoal) * 100)) : 0;
+                    return (
+                      <button
+                        key={c._id}
+                        onClick={() => navigate(`/community/campaigns/${c._id}`)}
+                        className="bg-white border border-slate-100 rounded-3xl overflow-hidden text-left hover:shadow-lg transition-all"
+                      >
+                        {c.imageUrl ? (
+                          <img src={c.imageUrl} alt={c.title} className="w-full h-36 object-cover" />
+                        ) : (
+                          <div className="w-full h-36 bg-gradient-to-br from-teal-100 to-emerald-100" />
+                        )}
+                        <div className="p-5 space-y-3">
+                          <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">{c.category?.replace('_', ' ')}</p>
+                          <h3 className="font-black text-slate-900 leading-tight">{c.title}</h3>
+                          {c.targetGoal > 0 && (
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                <span>{c.supportersCount} / {c.targetGoal}</span>
+                                <span>{percent}%</span>
+                              </div>
+                              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-teal-400 to-emerald-500" style={{ width: `${percent}%` }} />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

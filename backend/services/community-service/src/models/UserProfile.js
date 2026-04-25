@@ -12,7 +12,7 @@ const userProfileSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['worker', 'lawyer', 'ngo_representative', 'employer', 'admin'],
+        enum: ['worker', 'lawyer', 'ngo', 'ngo_representative', 'employer', 'admin'],
         default: 'worker',
     },
     isVerified: {
@@ -36,7 +36,16 @@ const userProfileSchema = new mongoose.Schema({
     bookmarks: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Post'
-    }]
+    }],
+    // Privacy controls (Phase 3.1)
+    isPrivate: {
+        type: Boolean,
+        default: false
+    },
+    hiddenFields: {
+        type: [String],
+        default: []  // Allowlist-validated in controller: 'bio' | 'followers' | 'following'
+    }
 }, {
     timestamps: true
 });

@@ -7,6 +7,7 @@ router.use(protect);
 
 router.post('/:postId',           commentController.addComment);
 router.get('/:postId',            commentController.getComments);
+router.patch('/:commentId',       commentController.updateComment);
 router.delete('/:commentId',      commentController.deleteComment);
 router.post('/:commentId/report', commentController.reportComment);
 

@@ -1,4 +1,6 @@
 const Report = require('../models/Report');
+const { emitEvent } = require('../utils/kafkaProducer');
+const { COMMUNITY_EVENTS, TOPICS } = require('../utils/eventTypes');
 
 const ALLOWED_TARGET_TYPES = ['Post', 'Comment', 'UserProfile'];
 const ALLOWED_STATUSES     = ['Pending', 'Reviewed', 'Resolved'];
@@ -82,6 +84,15 @@ exports.updateReportStatus = async (req, res) => {
     );
 
     if (!report) return res.status(404).json({ message: 'Report not found' });
+
+    if (status === 'Resolved') {
+      emitEvent(TOPICS.COMMUNITY, COMMUNITY_EVENTS.REPORT_RESOLVED, {
+        reporterId: report.reporterId,
+        targetType: report.targetType,
+        targetId: report.targetId,
+        reportId: report._id,
+      });
+    }
 
     res.json(report);
   } catch (error) {

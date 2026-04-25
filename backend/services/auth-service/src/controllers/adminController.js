@@ -2,6 +2,8 @@ const adminService = require('../services/adminService');
 const aiService = require('../services/aiService');
 const { getGridFSBucket } = require('../config/gridfs');
 const User = require('../models/User');
+const { emitEvent } = require('../utils/kafkaProducer');
+const { AUTH_EVENTS, TOPICS } = require('../utils/eventTypes');
 
 const getAllUsers = async (req, res, next) => {
     try {
@@ -157,6 +159,103 @@ const rejectUser = async (req, res, next) => {
     }
 };
 
+// ── Moderation: warn / suspend / ban / lift (Phase 5.4) ──────────────────────
+
+const warnUser = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        const by = req.user?._id || req.user?.userId;
+
+        const user = await User.findById(id);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        user.moderationHistory.push({ action: 'warn', reason: reason || '', by, at: new Date() });
+        await user.save();
+
+        emitEvent(TOPICS.AUTH, AUTH_EVENTS.USER_WARNED, {
+            userId: user._id.toString(),
+            reason: reason || '',
+        });
+
+        res.json({ success: true, message: 'User warned' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const suspendUser = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { durationDays = 7, reason } = req.body;
+        const by = req.user?._id || req.user?.userId;
+
+        const days = Math.max(1, Math.min(365, parseInt(durationDays) || 7));
+        const user = await User.findById(id);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        user.suspendedUntil = until;
+        user.moderationHistory.push({ action: 'suspend', reason: reason || '', by, at: new Date(), durationDays: days });
+        await user.save();
+
+        emitEvent(TOPICS.AUTH, AUTH_EVENTS.USER_SUSPENDED, {
+            userId: user._id.toString(),
+            reason: reason || '',
+            suspendedUntil: until,
+        });
+
+        res.json({ success: true, message: `User suspended for ${days} days`, suspendedUntil: until });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const banUser = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        const by = req.user?._id || req.user?.userId;
+
+        const user = await User.findById(id);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        user.isBanned = true;
+        user.isActive = false;
+        user.moderationHistory.push({ action: 'ban', reason: reason || '', by, at: new Date() });
+        await user.save();
+
+        emitEvent(TOPICS.AUTH, AUTH_EVENTS.USER_BANNED, {
+            userId: user._id.toString(),
+            reason: reason || '',
+        });
+
+        res.json({ success: true, message: 'User banned' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const liftSuspension = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const by = req.user?._id || req.user?.userId;
+
+        const user = await User.findById(id);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        user.suspendedUntil = null;
+        user.isBanned = false;
+        user.isActive = true;
+        user.moderationHistory.push({ action: 'lift', by, at: new Date() });
+        await user.save();
+
+        res.json({ success: true, message: 'Suspension/ban lifted' });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getAllUsers,
     updateUserRole,
@@ -164,5 +263,9 @@ module.exports = {
     deleteUser,
     approveUser,
     analyzeUserDocuments,
-    rejectUser
+    rejectUser,
+    warnUser,
+    suspendUser,
+    banUser,
+    liftSuspension
 };

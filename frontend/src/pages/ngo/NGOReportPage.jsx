@@ -7,10 +7,31 @@ import { Spinner } from "@/components/common/Spinner";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Input } from "@/components/common/Input";
 import { useState } from "react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const NGOReportsPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const res = await complaintApi.downloadNgoReport({});
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `laborguard-ngo-report-${Date.now()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('NGO report downloaded');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to generate PDF');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   // Reuse complaint listing as the basis for report generation
   const { data: cases, isLoading } = useQuery({
@@ -74,14 +95,25 @@ const NGOReportsPage = () => {
             Export resolved case data for advocacy reports and government submissions.
           </p>
         </div>
-        <Button
-          onClick={handleExport}
-          className="h-16 px-10 rounded-full font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-primary/20"
-          disabled={!filtered?.length}
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Export CSV ({filtered?.length || 0} cases)
-        </Button>
+        <div className="flex flex-col md:flex-row gap-3">
+          <Button
+            onClick={handleDownloadPdf}
+            disabled={downloadingPdf}
+            className="h-16 px-10 rounded-full font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-primary/20"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            {downloadingPdf ? 'Generating PDF…' : 'Download PDF Report'}
+          </Button>
+          <Button
+            onClick={handleExport}
+            variant="outline"
+            className="h-16 px-10 rounded-full font-black uppercase tracking-widest text-[10px] border-2"
+            disabled={!filtered?.length}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV ({filtered?.length || 0})
+          </Button>
+        </div>
       </header>
 
       {/* Search */}

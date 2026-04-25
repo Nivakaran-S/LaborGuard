@@ -71,7 +71,7 @@ const appointmentSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ['auto_booked', 'confirmed', 'completed', 'cancelled'],
+      enum: ['requested', 'auto_booked', 'confirmed', 'completed', 'cancelled'],
       default: 'auto_booked'
     },
 
@@ -100,10 +100,27 @@ const appointmentSchema = new mongoose.Schema(
       default: null
     },
 
-    // Notes added by admin or legal officer
+    // Notes added by admin or legal officer (pre-meeting)
     notes: {
       type: String,
       maxlength: [1000, 'Notes cannot exceed 1000 characters'],
+      default: null
+    },
+
+    // Post-meeting outcome notes recorded by the assigned legal officer.
+    // Separate from `notes` so admin/lawyer pre-meeting context is preserved.
+    outcomeNotes: {
+      type: String,
+      maxlength: [2000, 'Outcome notes cannot exceed 2000 characters'],
+      default: null
+    },
+    outcomeRecordedAt: {
+      type: Date,
+      default: null
+    },
+    outcomeRecordedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
       default: null
     },
 

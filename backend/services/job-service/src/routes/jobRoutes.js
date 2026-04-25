@@ -10,7 +10,8 @@ const {
     getEmployerApplications,
     getEmployerJobs,
     getJobApplications,
-    updateApplicationStatus
+    updateApplicationStatus,
+    downloadJobReport
 } = require('../controllers/jobController');
 
 const { protect, authorize } = require('../middleware/authMiddleware');
@@ -34,6 +35,7 @@ router.route('/:id')
     .delete(protect, authorize('employer', 'admin'), deleteJob);
 
 router.get('/:id/applications', protect, authorize('employer', 'admin'), getJobApplications);
+router.get('/:id/report', protect, authorize('employer', 'admin'), downloadJobReport);
 router.post('/:id/apply', protect, authorize('worker'), applyToJob);
 router.put('/applications/:appId/status', protect, authorize('employer', 'admin'), updateApplicationStatus);
 

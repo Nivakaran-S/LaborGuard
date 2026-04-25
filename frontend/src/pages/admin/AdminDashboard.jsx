@@ -146,6 +146,34 @@ const AdminDashboard = () => {
         }
     });
 
+    // Moderation (Phase 5.4)
+    const warnMutation = useMutation({
+        mutationFn: ({ userId, reason }) => adminApi.warnUser(userId, reason),
+        onSuccess: () => { queryClient.invalidateQueries(['admin-users']); toast.success('User warned'); }
+    });
+    const suspendMutation = useMutation({
+        mutationFn: ({ userId, durationDays, reason }) => adminApi.suspendUser(userId, durationDays, reason),
+        onSuccess: () => { queryClient.invalidateQueries(['admin-users']); toast.success('User suspended'); }
+    });
+    const banMutation = useMutation({
+        mutationFn: ({ userId, reason }) => adminApi.banUser(userId, reason),
+        onSuccess: () => { queryClient.invalidateQueries(['admin-users']); toast.success('User banned'); }
+    });
+    const liftMutation = useMutation({
+        mutationFn: (userId) => adminApi.liftSuspension(userId),
+        onSuccess: () => { queryClient.invalidateQueries(['admin-users']); toast.success('Suspension lifted'); }
+    });
+
+    // Community analytics (Phase 5.2)
+    const { data: communityAnalytics } = useQuery({
+        queryKey: ['admin-community-analytics'],
+        queryFn: async () => {
+            const res = await adminApi.getCommunityAnalytics();
+            return res.data;
+        },
+        enabled: activeTab === 'community',
+    });
+
     const handleApprove = () => {
         approveMutation.mutate(selectedUser._id);
     };
@@ -207,6 +235,7 @@ const AdminDashboard = () => {
                      <div className="flex items-center gap-1.5 bg-slate-900 p-2 rounded-[24px] shadow-2xl">
                         {[
                             { id: "users", icon: Users, label: "Registry" },
+                            { id: "community", icon: BarChart3, label: "Community" },
                             { id: "health", icon: Cpu, label: "Hardware" },
                             { id: "audit", icon: History, label: "Logs" }
                         ].map((tab) => (
@@ -328,6 +357,40 @@ const AdminDashboard = () => {
                                                             {u.isActive === false ? "Activate Account" : "Deactivate Account"}
                                                         </DropdownMenuItem>
                                                     )}
+                                                    <DropdownMenuItem
+                                                        onClick={() => {
+                                                            const reason = prompt('Warning reason (optional)?') || '';
+                                                            warnMutation.mutate({ userId: u._id, reason });
+                                                        }}
+                                                        className="rounded-xl px-4 py-3 font-bold text-xs uppercase tracking-widest cursor-pointer mb-1 hover:bg-amber-50 text-amber-700">
+                                                        <AlertTriangle className="h-4 w-4 mr-2" /> Warn
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={() => {
+                                                            const days = parseInt(prompt('Suspend for how many days? (1–365)', '7'), 10);
+                                                            if (!days || days < 1) return;
+                                                            const reason = prompt('Suspension reason?') || '';
+                                                            suspendMutation.mutate({ userId: u._id, durationDays: days, reason });
+                                                        }}
+                                                        className="rounded-xl px-4 py-3 font-bold text-xs uppercase tracking-widest cursor-pointer mb-1 hover:bg-orange-50 text-orange-700">
+                                                        <Lock className="h-4 w-4 mr-2" /> Suspend
+                                                    </DropdownMenuItem>
+                                                    {(u.isBanned || u.suspendedUntil) && (
+                                                        <DropdownMenuItem
+                                                            onClick={() => liftMutation.mutate(u._id)}
+                                                            className="rounded-xl px-4 py-3 font-bold text-xs uppercase tracking-widest cursor-pointer mb-1 hover:bg-teal-50 text-teal-700">
+                                                            <CheckCircle className="h-4 w-4 mr-2" /> Lift Suspension
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    <DropdownMenuItem
+                                                        onClick={() => {
+                                                            if (!confirm('Permanently ban this user? This can be lifted.')) return;
+                                                            const reason = prompt('Ban reason?') || '';
+                                                            banMutation.mutate({ userId: u._id, reason });
+                                                        }}
+                                                        className="rounded-xl px-4 py-3 font-bold text-xs uppercase tracking-widest cursor-pointer mb-1 hover:bg-red-50 text-red-700">
+                                                        <ShieldAlert className="h-4 w-4 mr-2" /> Ban
+                                                    </DropdownMenuItem>
                                                     <DropdownMenuItem onClick={() => handleDelete(u)} className="rounded-xl px-4 py-3 font-bold text-xs uppercase tracking-widest cursor-pointer text-red-600 focus:text-red-700 hover:bg-red-50 focus:bg-red-50">
                                                         <Trash2 className="h-4 w-4 mr-2" /> Delete Identity
                                                     </DropdownMenuItem>
@@ -338,6 +401,64 @@ const AdminDashboard = () => {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === "community" && (
+                <div className="space-y-10 animate-in fade-in slide-in-from-bottom-5 duration-700">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {[
+                            { label: 'Posts Today', value: communityAnalytics?.postsToday ?? '—' },
+                            { label: 'Posts This Week', value: communityAnalytics?.postsThisWeek ?? '—' },
+                            { label: 'Active Users (7d)', value: communityAnalytics?.activeUsers7d ?? '—' },
+                            { label: 'Total Community Users', value: communityAnalytics?.totalUsers ?? '—' },
+                            { label: 'Reports Open', value: communityAnalytics?.reportsOpen ?? '—' },
+                            { label: 'Active Campaigns', value: communityAnalytics?.campaignsActive ?? '—' },
+                            { label: 'Campaign Supporters', value: communityAnalytics?.campaignsSupportersTotal ?? '—' },
+                            { label: 'Posts This Month', value: communityAnalytics?.postsThisMonth ?? '—' },
+                        ].map((s, i) => (
+                            <div key={i} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                                <p className="text-3xl font-black text-slate-900">{s.value}</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">{s.label}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-600 mb-4">Posts — Last 14 Days</h3>
+                        {communityAnalytics?.daily14d?.length ? (
+                            <div className="flex items-end gap-1 h-32">
+                                {communityAnalytics.daily14d.map((d) => {
+                                    const max = Math.max(1, ...communityAnalytics.daily14d.map((x) => x.posts));
+                                    const h = Math.round((d.posts / max) * 100);
+                                    return (
+                                        <div key={d.date} className="flex-1 flex flex-col items-center gap-1" title={`${d.date}: ${d.posts} posts, ${d.likes} likes, ${d.comments} comments`}>
+                                            <div className="w-full bg-gradient-to-t from-teal-500 to-emerald-400 rounded-t" style={{ height: `${h}%` }} />
+                                            <span className="text-[8px] font-bold text-slate-400">{d.date.slice(5)}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-slate-400 font-bold">No activity in the last 14 days</p>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-600 mb-4">Top Hashtags (30d)</h3>
+                        {communityAnalytics?.topHashtags?.length ? (
+                            <div className="flex flex-wrap gap-2">
+                                {communityAnalytics.topHashtags.map((h) => (
+                                    <div key={h.tag} className="bg-teal-50 text-teal-700 rounded-full px-3 py-1 text-xs font-bold flex items-center gap-2">
+                                        <span>#{h.tag}</span>
+                                        <span className="text-[10px] bg-teal-200 text-teal-800 rounded-full px-1.5">{h.count}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-slate-400 font-bold">No hashtag data yet</p>
+                        )}
                     </div>
                 </div>
             )}

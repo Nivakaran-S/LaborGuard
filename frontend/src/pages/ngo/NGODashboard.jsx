@@ -49,14 +49,16 @@ const NGODashboard = () => {
 
     const [searchTerm, setSearchTerm] = useState("");
 
-    // Fetch system-wide stats for advocacy
-    const { data: stats, isLoading: statsLoading } = useQuery({
-        queryKey: ['ngo-stats'],
+    // NGO-scoped stats (N6/N7). Falls back to global when nothing is monitored yet.
+    const { data: scoped, isLoading: statsLoading } = useQuery({
+        queryKey: ['ngo-scoped-stats'],
         queryFn: async () => {
-            const res = await complaintApi.getStats();
+            const res = await complaintApi.getNgoScopedStats();
             return res.data.data;
         }
     });
+    const stats = scoped;
+    const isGlobalFallback = scoped?.scope === 'global';
 
     // Fetch critical unassigned cases for intervention
     const { data: criticalCasesData, isLoading: casesLoading } = useGetComplaints({ 
@@ -98,6 +100,11 @@ const NGODashboard = () => {
                         Monitoring human rights for <span className="text-slate-900 not-italic font-black">"{user?.organizationName || "Independent Observer"}"</span>. <br />
                         <span className="text-slate-800 not-italic font-black tracking-tight">Protecting the unseen workforce of Sri Lanka.</span>
                     </p>
+                    {isGlobalFallback && (
+                        <div className="mt-3 inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-widest">
+                            Showing global view — add cases to your watchlist for org-scoped stats
+                        </div>
+                    )}
                 </div>
                 
                 <div className="flex gap-4">

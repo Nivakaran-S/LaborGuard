@@ -113,6 +113,8 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION}
+      # Validates x-internal-secret on /api/auth/internal/* routes
+      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
     depends_on:
       kafka:
         condition: service_healthy
@@ -229,9 +231,15 @@ services:
       - EMAIL_SERVICE=${EMAIL_SERVICE}
       - EMAIL_USER=${EMAIL_USER}
       - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      # Cross-service lookup: talks to auth-service over HTTP with shared secret
+      - AUTH_SERVICE_URL=http://auth-service:5001
+      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
+      - APP_URL=${APP_URL:-https://labor-guard.vercel.app}
     depends_on:
       kafka:
         condition: service_healthy
+      auth-service:
+        condition: service_started
     networks:
       - laborguard-network
     dns: [1.1.1.1, 8.8.8.8]

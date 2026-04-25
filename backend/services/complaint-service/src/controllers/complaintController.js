@@ -1,4 +1,7 @@
 const complaintService = require('../services/complaintService');
+const Complaint = require('../models/Complaint');
+const { emitEvent } = require('../utils/kafkaProducer');
+const { COMPLAINT_EVENTS, TOPICS } = require('../utils/eventTypes');
 
 /**
  * @desc    File a new complaint
@@ -238,6 +241,144 @@ const generateReport = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Share a resolved/rejected complaint anonymously to the community
+ * @route   POST /api/complaints/:id/share-to-community
+ * @access  Private (filer only)
+ *
+ * PII handling: allowlist approach — only title, description, category, and
+ * location.district are published. workerId, organizationName, city, and
+ * attachments are stripped. sharedToCommunityAt prevents re-sharing.
+ */
+/**
+ * @desc    Generate an NGO impact report PDF (aggregated over filters)
+ * @route   GET /api/complaints/ngo-report
+ * @access  Private (ngo, admin)
+ */
+const generateNgoImpactReport = async (req, res, next) => {
+  try {
+    const { generateNgoReport } = require('../utils/pdfGenerator');
+
+    const matchFilter = {};
+    if (req.query.category) matchFilter.category = req.query.category;
+    if (req.query.status) matchFilter.status = req.query.status;
+    if (req.query.from || req.query.to) {
+      matchFilter.createdAt = {};
+      if (req.query.from) matchFilter.createdAt.$gte = new Date(req.query.from);
+      if (req.query.to) matchFilter.createdAt.$lte = new Date(req.query.to);
+    }
+
+    const [total, byStatus, byCategory, complaints] = await Promise.all([
+      Complaint.countDocuments(matchFilter),
+      Complaint.aggregate([{ $match: matchFilter }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Complaint.aggregate([{ $match: matchFilter }, { $group: { _id: '$category', count: { $sum: 1 } } }]),
+      Complaint.find(matchFilter)
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .select('title category status priority location createdAt')
+        .lean(),
+    ]);
+
+    const statusMap = byStatus.reduce((acc, s) => { acc[s._id] = s.count; return acc; }, {});
+
+    const payload = {
+      summary: {
+        total,
+        pending: statusMap.pending || 0,
+        underReview: statusMap.under_review || 0,
+        inProgress: statusMap.in_progress || 0,
+        resolved: statusMap.resolved || 0,
+        rejected: statusMap.rejected || 0,
+        resolutionRate: total > 0 ? Math.round(((statusMap.resolved || 0) / total) * 100) : 0,
+      },
+      byStatus,
+      byCategory,
+      complaints,
+      filters: req.query,
+    };
+
+    generateNgoReport(payload, res);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── NGO monitoring endpoints (N6/N7) ─────────────────────────────────────────
+
+const monitorComplaint = async (req, res, next) => {
+  try {
+    const complaint = await complaintService.monitorComplaint(req.params.id, req.user._id || req.user.userId);
+    res.json({
+      success: true,
+      message: 'Complaint added to your monitored cases.',
+      data: complaint,
+    });
+  } catch (error) { next(error); }
+};
+
+const unmonitorComplaint = async (req, res, next) => {
+  try {
+    const complaint = await complaintService.unmonitorComplaint(req.params.id, req.user._id || req.user.userId);
+    res.json({
+      success: true,
+      message: 'Complaint removed from your monitored cases.',
+      data: complaint,
+    });
+  } catch (error) { next(error); }
+};
+
+const getMonitoredComplaints = async (req, res, next) => {
+  try {
+    const result = await complaintService.getMonitoredComplaints(req.user._id || req.user.userId, req.query);
+    res.json({ success: true, data: result.complaints, pagination: result.pagination });
+  } catch (error) { next(error); }
+};
+
+const getNgoScopedStats = async (req, res, next) => {
+  try {
+    const stats = await complaintService.getNgoScopedStats(req.user._id || req.user.userId);
+    res.json({ success: true, data: stats });
+  } catch (error) { next(error); }
+};
+
+const shareToCommunity = async (req, res, next) => {
+  try {
+    const complaint = await Complaint.findById(req.params.id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: 'Complaint not found' });
+    }
+    if (complaint.workerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Only the filer can share this case' });
+    }
+    if (!['resolved', 'rejected'].includes(complaint.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only resolved or rejected cases can be shared to the community',
+      });
+    }
+    if (complaint.sharedToCommunityAt) {
+      return res.status(409).json({ success: false, message: 'This case has already been shared' });
+    }
+
+    complaint.sharedToCommunityAt = new Date();
+    await complaint.save();
+
+    // Publish only whitelisted fields. Anything else stays private.
+    emitEvent(TOPICS.COMPLAINT, COMPLAINT_EVENTS.COMPLAINT_SHARED_TO_COMMUNITY, {
+      title: complaint.title,
+      description: complaint.description,
+      category: complaint.category,
+      district: complaint.location?.district || '',
+      status: complaint.status,
+      complaintId: complaint._id,
+    });
+
+    res.json({ success: true, message: 'Shared anonymously to the community' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createComplaint,
   getAllComplaints,
@@ -249,5 +390,11 @@ module.exports = {
   deleteComplaint,
   getComplaintStats,
   uploadAttachment,
-  generateReport
+  generateReport,
+  shareToCommunity,
+  generateNgoImpactReport,
+  monitorComplaint,
+  unmonitorComplaint,
+  getMonitoredComplaints,
+  getNgoScopedStats
 };

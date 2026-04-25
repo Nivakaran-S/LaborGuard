@@ -202,6 +202,33 @@ const getDocument = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Internal-only: look up a user's email by ID for cross-service email delivery.
+ * @route   GET /api/auth/internal/users/:id/email
+ * @access  Service-to-service via x-internal-secret header
+ *
+ * Returns a minimal {userId, email, firstName, role} — no sensitive fields.
+ * Callers: notification-service for email fan-out.
+ */
+const internalGetUserEmail = async (req, res, next) => {
+  try {
+    const User = require('../models/User');
+    const user = await User.findById(req.params.id, { email: 1, firstName: 1, role: 1 }).lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({
+      success: true,
+      data: {
+        userId: user._id.toString(),
+        email: user.email,
+        firstName: user.firstName,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -215,4 +242,5 @@ module.exports = {
   getProfile,           // FIX: added
   updateProfile,        // FIX: added
   getDocument,
+  internalGetUserEmail,
 };

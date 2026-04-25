@@ -16,6 +16,16 @@ const { upload } = require('../utils/cloudinary');
 // GET /api/complaints/stats
 router.get('/stats', authenticate, authorize('admin', 'lawyer', 'ngo'), complaintController.getComplaintStats);
 
+// GET /api/complaints/ngo-report — PDF aggregated impact report (N9)
+// Registered before /:id so it isn't caught as an ID lookup.
+router.get('/ngo-report', authenticate, authorize('ngo', 'admin'), complaintController.generateNgoImpactReport);
+
+// NGO org-scoped endpoints (N6/N7)
+router.get('/ngo/monitored', authenticate, authorize('ngo', 'admin'), listComplaintsRules, validate, complaintController.getMonitoredComplaints);
+router.get('/ngo/stats',     authenticate, authorize('ngo', 'admin'), complaintController.getNgoScopedStats);
+router.post('/:id/monitor',  authenticate, authorize('ngo', 'admin'), validateObjectId, validate, complaintController.monitorComplaint);
+router.post('/:id/unmonitor',authenticate, authorize('ngo', 'admin'), validateObjectId, validate, complaintController.unmonitorComplaint);
+
 // GET /api/complaints/my
 router.get('/my', authenticate, authorize('worker'), listComplaintsRules, validate, complaintController.getMyComplaints);
 
@@ -45,5 +55,8 @@ router.post('/:id/attachments', authenticate, authorize('worker', 'admin'), vali
 
 // GET /api/complaints/:id/report
 router.get('/:id/report', authenticate, authorize('worker', 'admin', 'lawyer', 'ngo'), validateObjectId, complaintController.generateReport);
+
+// POST /api/complaints/:id/share-to-community (Phase 5.1)
+router.post('/:id/share-to-community', authenticate, authorize('worker'), validateObjectId, complaintController.shareToCommunity);
 
 module.exports = router;

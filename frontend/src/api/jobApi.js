@@ -30,4 +30,8 @@ export const jobApi = {
   // FIX: was (appId, status) — now (appId, data) to include rejectionReason, arrivalDate, etc.
   updateApplicationStatus: (appId, data) =>
     jobClient.put(`/jobs/applications/${appId}/status`, data),
+
+  // Employer: PDF report for a single job
+  downloadJobReport: (jobId) =>
+    jobClient.get(`/jobs/${jobId}/report`, { responseType: 'blob' }),
 };

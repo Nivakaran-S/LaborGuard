@@ -3,7 +3,7 @@
 // in auth-service at /api/admin. All routes require role: admin.
 // Backend routes reference: backend/services/auth-service/src/routes/adminRoutes.js
 
-import { authClient } from './apiClient';
+import { authClient, communityClient } from './apiClient';
 
 export const adminApi = {
   /**
@@ -51,4 +51,13 @@ export const adminApi = {
    * Trigger AI document scanning
    */
   analyzeUserDocuments: (id) => authClient.get(`/admin/users/${id}/analyze`),
+
+  // Moderation (Phase 5.4)
+  warnUser:    (id, reason)                    => authClient.post(`/admin/users/${id}/warn`, { reason }),
+  suspendUser: (id, durationDays, reason)      => authClient.post(`/admin/users/${id}/suspend`, { durationDays, reason }),
+  banUser:     (id, reason)                    => authClient.post(`/admin/users/${id}/ban`, { reason }),
+  liftSuspension: (id)                         => authClient.post(`/admin/users/${id}/lift`),
+
+  // Community analytics (Phase 5.2) — community-service, admin-only
+  getCommunityAnalytics: ()                    => communityClient.get('/analytics/community'),
 };

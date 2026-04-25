@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useComplaints } from "@/hooks/useComplaints";
+import { complaintApi } from "@/api/complaintApi";
+import { toast } from "sonner";
 import { 
   FileText, 
   Clock, 
@@ -31,6 +33,22 @@ const ComplaintDetailsPage = () => {
     const { user } = useAuth();
     const { useGetComplaint, updateStatus } = useComplaints();
     const { data: complaint, isLoading, error } = useGetComplaint(id);
+    const [requesting, setRequesting] = useState(false);
+
+    const handleRequestAppointment = async () => {
+        const reason = prompt('What would you like the legal officer to help with?');
+        if (reason === null) return;
+        setRequesting(true);
+        try {
+            await complaintApi.requestAppointment({ complaintId: id, reason });
+            toast.success('Appointment requested. An admin will confirm shortly.');
+            navigate('/worker/appointments');
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Failed to request appointment');
+        } finally {
+            setRequesting(false);
+        }
+    };
 
     const getStatusConfig = (status) => {
         switch (status) {
@@ -40,11 +58,17 @@ const ComplaintDetailsPage = () => {
                 icon: Clock,
                 desc: "Your case has been filed and is waiting for an administrator to assign a legal officer."
             };
-            case 'under_review': return { 
-                label: 'Under Investigation', 
-                class: 'bg-blue-100 text-blue-700 border-blue-200', 
+            case 'under_review': return {
+                label: 'Under Investigation',
+                class: 'bg-blue-100 text-blue-700 border-blue-200',
                 icon: ShieldAlert,
                 desc: "A legal officer is currently reviewing your evidence and contacting the involved parties."
+            };
+            case 'in_progress': return {
+                label: 'Active Case',
+                class: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+                icon: ShieldAlert,
+                desc: "Your case is being actively worked on. Expect appointments and direct contact with your legal officer."
             };
             case 'resolved': return { 
                 label: 'Case Resolved', 
@@ -157,6 +181,16 @@ const ComplaintDetailsPage = () => {
                                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
                              </Link>
                          </Button>
+                         {user?.role === 'worker' && complaint.workerId === user.userId && !['resolved', 'rejected'].includes(complaint.status) && (
+                           <Button
+                             onClick={handleRequestAppointment}
+                             disabled={requesting}
+                             variant="outline"
+                             className="w-full h-14 rounded-[32px] font-black uppercase tracking-widest text-[10px] border-2"
+                           >
+                             {requesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Calendar className="h-4 w-4 mr-2" /> Request Appointment</>}
+                           </Button>
+                         )}
                     </div>
                  </div>
             </div>

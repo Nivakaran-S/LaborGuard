@@ -1,0 +1,214 @@
+# Render blueprint for LaborGuard backend microservices.
+# All secret values (MONGODB_URI, KAFKA_BROKER, JWT secrets, Cloudinary, Resend,
+# OpenAI, Perspective, etc.) must be configured per-service in the Render dashboard.
+# The `sync: false` flag below tells Render to ignore these in the blueprint and
+# keep whatever is already set in the dashboard.
+
+services:
+  # ── Auth Service ───────────────────────────────────────────────────────────
+  - type: web
+    name: laborguard-auth-service
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: backend/services/auth-service
+    buildCommand: npm ci --no-audit --no-fund
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SERVICE_NAME
+        value: auth-service
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: laborguard-auth
+      - key: KAFKA_BROKER
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      # Validates x-internal-secret on /api/auth/internal/* routes (called by notification-service)
+      - key: INTERNAL_SERVICE_SECRET
+        sync: false
+
+  # ── Community Service ──────────────────────────────────────────────────────
+  - type: web
+    name: laborguard-community-service
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: backend/services/community-service
+    buildCommand: npm ci --no-audit --no-fund
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SERVICE_NAME
+        value: community-service
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: laborguard-community
+      - key: KAFKA_BROKER
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TOXICITY_THRESHOLD
+        value: "0.7"
+      - key: NSFW_THRESHOLD
+        value: "0.5"
+
+  # ── Complaint Service ──────────────────────────────────────────────────────
+  - type: web
+    name: laborguard-complaint-service
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: backend/services/complaint-service
+    buildCommand: npm ci --no-audit --no-fund
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SERVICE_NAME
+        value: complaint-service
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: laborguard-complaint
+      - key: KAFKA_BROKER
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+
+  # ── Notification Service ───────────────────────────────────────────────────
+  - type: web
+    name: laborguard-notification-service
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: backend/services/notification-service
+    buildCommand: npm ci --no-audit --no-fund
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SERVICE_NAME
+        value: notification-service
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: laborguard-notification
+      - key: KAFKA_BROKER
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      # Cross-service email lookup — talks to auth-service over HTTP
+      - key: AUTH_SERVICE_URL
+        value: https://laborguard-auth-service.onrender.com
+      - key: INTERNAL_SERVICE_SECRET
+        sync: false
+      - key: APP_URL
+        value: https://labor-guard.vercel.app
+
+  # ── Messaging Service ──────────────────────────────────────────────────────
+  - type: web
+    name: laborguard-messaging-service
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: backend/services/messaging-service
+    buildCommand: npm ci --no-audit --no-fund
+    startCommand: node src/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SERVICE_NAME
+        value: messaging-service
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: laborguard-messaging
+      - key: KAFKA_BROKER
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: CENTRIFUGO_URL
+        sync: false
+      - key: CENTRIFUGO_API_KEY
+        sync: false
+
+  # ── Job Service ────────────────────────────────────────────────────────────
+  - type: web
+    name: laborguard-jobs-service
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: backend/services/job-service
+    buildCommand: npm ci --no-audit --no-fund
+    startCommand: node src/server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SERVICE_NAME
+        value: job-service
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: laborguard-jobs
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false

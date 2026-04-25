@@ -36,11 +36,12 @@ const LegalDashboard = () => {
 
   const getStatusConfig = (status) => {
     switch (status) {
-      case 'pending':      return { label: 'Pending',    class: 'bg-amber-100 text-amber-700' };
-      case 'under_review': return { label: 'In Review',  class: 'bg-blue-100 text-blue-700' };
-      case 'resolved':     return { label: 'Resolved',   class: 'bg-green-100 text-green-700' };
-      case 'rejected':     return { label: 'Rejected',   class: 'bg-red-100 text-red-700' };
-      default:             return { label: status,       class: 'bg-slate-100 text-slate-700' };
+      case 'pending':      return { label: 'Pending',     class: 'bg-amber-100 text-amber-700' };
+      case 'under_review': return { label: 'In Review',   class: 'bg-blue-100 text-blue-700' };
+      case 'in_progress':  return { label: 'In Progress', class: 'bg-indigo-100 text-indigo-700' };
+      case 'resolved':     return { label: 'Resolved',    class: 'bg-green-100 text-green-700' };
+      case 'rejected':     return { label: 'Rejected',    class: 'bg-red-100 text-red-700' };
+      default:             return { label: status,        class: 'bg-slate-100 text-slate-700' };
     }
   };
 

@@ -144,6 +144,46 @@ const cancelAppointment = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Worker requests an appointment for their own complaint (W20)
+ * @route   POST /api/appointments/request
+ * @access  Private (worker)
+ */
+const requestAppointment = async (req, res, next) => {
+  try {
+    const appointment = await appointmentService.requestAppointment(req.body, req.user);
+    res.status(201).json({
+      success: true,
+      message: 'Appointment requested. An admin will confirm it shortly.',
+      data: appointment
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Assigned lawyer records outcome notes after a meeting (L5)
+ * @route   PATCH /api/appointments/:id/outcome
+ * @access  Private (assigned lawyer or admin)
+ */
+const recordAppointmentOutcome = async (req, res, next) => {
+  try {
+    const appointment = await appointmentService.recordAppointmentOutcome(
+      req.params.id,
+      req.body,
+      req.user
+    );
+    res.status(200).json({
+      success: true,
+      message: 'Outcome recorded successfully.',
+      data: appointment
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getAllAppointments,
   getMyAppointments,
@@ -151,5 +191,7 @@ module.exports = {
   getAppointmentById,
   confirmAppointment,
   rescheduleAppointment,
-  cancelAppointment
+  cancelAppointment,
+  requestAppointment,
+  recordAppointmentOutcome
 };
