@@ -48,23 +48,27 @@ exports.getStatuses = async (req, res) => {
     try {
         const { userId } = req.params;
 
-        // [PERF-1] Lightweight profile fetch — following array only
+        // Lightweight profile fetch — following array only.
+        // If the profile is missing (user registered before the `user_registered`
+        // event from auth-service was wired up, or the event got lost), don't
+        // 404 — that silently empties the StoriesBar and the user can't see
+        // the stories they just posted. Treat following as empty and proceed
+        // so the user always sees at least their own active stories.
         const profile = await UserProfile
             .findOne({ userId }, { following: 1 })
-            .lean();                                                // [PERF-2]
+            .lean();
 
-        if (!profile) return res.status(404).json({ message: 'User profile not found' });
+        const following = profile?.following || [];
 
-        // [PERF-1] $or resolved fully on MongoDB — no JS array spread/concat
         const statuses = await Status.find({
             $or: [
-                { authorId: { $in: profile.following } },
+                { authorId: { $in: following } },
                 { authorId: userId }
             ],
             expiresAt: { $gt: new Date() }
         })
             .sort({ createdAt: -1 })
-            .lean();                                                // [PERF-2]
+            .lean();
 
         res.json(statuses);
     } catch (error) {

@@ -202,7 +202,13 @@ const UserProfilePage = () => {
                     : profile.isPrivate ? "Request to Follow" : "Follow"}
                 </button>
                 <button
-                  onClick={() => navigate(`/messages?userId=${userId}`)}
+                  onClick={() => navigate(`/messages?userId=${userId}`, {
+                    state: {
+                      name: profile?.name || displayName,
+                      role: profile?.role || "",
+                      email: profile?.email || "",
+                    },
+                  })}
                   className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wide transition-colors"
                 >
                   <MessageCircle className="h-3.5 w-3.5" />

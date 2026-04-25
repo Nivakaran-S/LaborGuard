@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { messageApi } from "@/api/messageApi";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useMessagingStore } from "@/store/messagingStore";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import {
   Send, Search, MessageSquare, CheckCheck, ChevronLeft,
@@ -335,6 +335,74 @@ const ChatPage = () => {
   useEffect(() => {
     if (activeConversationId) inputRef.current?.focus();
   }, [activeConversationId]);
+
+  // ── Open / create chat when navigated with ?userId=XYZ ──────────────────────
+  // The Profile page's "Message" button hits /messages?userId=XYZ. Without
+  // this effect, ChatPage just landed on an empty inbox and the user had to
+  // click "+" and search again — which is what they reported.
+  const location = useLocation();
+  const targetUserId = searchParams.get("userId");
+  const targetState = location.state || {};
+  const targetHandledRef = useRef(false);
+
+  const openOrCreateMutation = useMutation({
+    mutationFn: (data) => messageApi.createConversation(data),
+    onSuccess: (res) => {
+      const id = res.data._id || res.data.data?._id;
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      if (id) setActiveConversation(id);
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Couldn't open chat");
+    },
+  });
+
+  useEffect(() => {
+    if (!targetUserId || targetHandledRef.current) return;
+    if (!user?.userId || convsLoading) return;        // wait for auth + list
+    if (targetUserId === user.userId) {                // tried to chat with yourself
+      targetHandledRef.current = true;
+      navigate("/messages", { replace: true });
+      return;
+    }
+
+    // 1) existing 1-1 conversation? open it.
+    const existing = conversations.find((c) =>
+      !c.isGroup &&
+      Array.isArray(c.participants) &&
+      c.participants.length === 2 &&
+      c.participants.includes(targetUserId) &&
+      c.participants.includes(user.userId)
+    );
+    if (existing) {
+      targetHandledRef.current = true;
+      setActiveConversation(existing._id);
+      navigate("/messages", { replace: true });
+      return;
+    }
+
+    // 2) create a new one. Use whatever profile info the caller passed via
+    // location.state (UserProfilePage sets this when you click Message),
+    // otherwise create with minimal info — receiver still sees the message,
+    // just with a placeholder name until participantInfo is filled in later.
+    targetHandledRef.current = true;
+    const myName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email || "";
+    const participantInfo = {
+      [user.userId]: { name: myName, email: user.email || "", role: user.role || "" },
+      [targetUserId]: {
+        name: targetState.name || "",
+        email: targetState.email || "",
+        role: targetState.role || "",
+      },
+    };
+    openOrCreateMutation.mutate({
+      participants: [user.userId, targetUserId],
+      isGroup: false,
+      participantInfo,
+    });
+    navigate("/messages", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetUserId, user?.userId, conversations, convsLoading]);
 
   // ── Send on Enter ──────────────────────────────────────────────────────────
   const handleKeyDown = (e) => {
