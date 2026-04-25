@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useComplaints } from "@/hooks/useComplaints";
+import { toast } from "sonner";
 import {
   Gavel, Clock, CheckCircle2, AlertCircle, Search, Filter,
   Eye, MessageSquare, FileBarChart, User as UserIcon, ShieldAlert,
-  Calendar, Briefcase, TrendingDown, TrendingUp, // FIX: TrendingUp was missing — caused crash
+  Calendar, Briefcase, TrendingDown, TrendingUp,
   LayoutGrid, ChevronRight, MoreVertical, Download, Building2
 } from "lucide-react";
 import { Button } from "@/components/common/Button";
@@ -27,12 +28,29 @@ const LegalDashboard = () => {
   const { useGetComplaints, downloadReport } = useComplaints();
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [exportingId, setExportingId] = useState(null);
 
   const { data: complaintsData, isLoading } = useGetComplaints({
-    assignedTo: user.id,
+    assignedTo: user?.userId,
     status: statusFilter !== "all" ? statusFilter : undefined,
   });
   const complaints = complaintsData?.complaints || [];
+
+  const handleExportReport = async (complaintId) => {
+    if (!complaintId) {
+      toast.error("Select a complaint to export");
+      return;
+    }
+    setExportingId(complaintId);
+    try {
+      await downloadReport(complaintId);
+      toast.success("Complaint PDF downloaded");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to download complaint PDF");
+    } finally {
+      setExportingId(null);
+    }
+  };
 
   const getStatusConfig = (status) => {
     switch (status) {
@@ -86,9 +104,10 @@ const LegalDashboard = () => {
           <Button
             variant="outline"
             className="h-12 px-6 rounded-full font-black uppercase tracking-widest text-[10px] border-2 border-slate-200 hover:border-primary hover:text-primary transition-all"
-            onClick={() => downloadReport?.mutate()}>
+            disabled={!filteredComplaints.length || !!exportingId}
+            onClick={() => handleExportReport(filteredComplaints[0]?._id)}>
             <Download className="h-4 w-4 mr-2" />
-            Export Report
+            {exportingId ? "Exporting..." : "Export Report"}
           </Button>
         </div>
       </header>
@@ -194,6 +213,15 @@ const LegalDashboard = () => {
                       onClick={() => navigate(`/messages?complaint=${complaint._id}`)}>
                       <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
                       Message
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={exportingId === complaint._id}
+                      className="h-10 px-5 rounded-full font-black uppercase tracking-widest text-[10px] border-2 hover:border-primary hover:text-primary transition-all"
+                      onClick={() => handleExportReport(complaint._id)}>
+                      <Download className="h-3.5 w-3.5 mr-1.5" />
+                      {exportingId === complaint._id ? "Exporting" : "PDF"}
                     </Button>
                   </div>
                 </div>
