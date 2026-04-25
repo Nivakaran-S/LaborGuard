@@ -12,7 +12,7 @@ import {
   Zap,
   Star
 } from 'lucide-react';
-import heroBg from '@/assets/hero-bg.jpg';
+import heroLabor from '@/assets/hero-labor.jpg';
 import { cn } from '@/lib/utils';
 
 const LandingPage = () => {
@@ -74,9 +74,9 @@ const LandingPage = () => {
                     <div className="relative hidden lg:block animate-in fade-in zoom-in-95 duration-1000 delay-300">
                          <div className="absolute inset-0 bg-primary/20 rounded-[80px] rotate-6 scale-95 blur-2xl opacity-20" />
                          <div className="relative rounded-[60px] overflow-hidden border-[12px] border-white shadow-3xl aspect-[4/5] bg-slate-100">
-                             <img 
-                                src="/src/assets/hero-labor.jpg" 
-                                alt="Worker Representative" 
+                             <img
+                                src={heroLabor}
+                                alt="Worker Representative"
                                 className="w-full h-full object-cover grayscale-[0.2] contrast-[1.1]"
                              />
                              <div className="absolute bottom-8 left-8 right-8 bg-white/90 backdrop-blur-xl p-8 rounded-[40px] border border-white/50 shadow-2xl">
