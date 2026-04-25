@@ -10,7 +10,7 @@ import { formatDistanceToNow } from "date-fns";
 import {
   Send, Search, MessageSquare, CheckCheck, ChevronLeft,
   Plus, Loader2, X, Users, UserPlus, Trash2, MoreVertical,
-  ImageIcon, Smile, ShieldCheck, Lock, ArrowLeft
+  ImageIcon, Smile, ShieldCheck, Lock, ArrowLeft, Paperclip, FileText
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/common/Avatar";
 import { Badge } from "@/components/common/Badge";
@@ -265,8 +265,12 @@ const ChatPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [showNewModal, setShowNewModal] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [pendingFiles, setPendingFiles] = useState([]); // File[] queued for next send
+  const [lightbox, setLightbox] = useState(null); // { url, name } | null
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -309,7 +313,10 @@ const ChatPage = () => {
       queryClient.invalidateQueries(["conversations"]);
       setNewMessage("");
       setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-    }
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to send");
+    },
   });
 
   // ── Delete message ─────────────────────────────────────────────────────────
@@ -413,8 +420,42 @@ const ChatPage = () => {
   };
 
   const handleSend = () => {
-    if (!newMessage.trim() || !activeConversationId || sendMutation.isPending) return;
-    sendMutation.mutate({ conversationId: activeConversationId, content: newMessage.trim() });
+    if (!activeConversationId || sendMutation.isPending) return;
+    if (!newMessage.trim() && pendingFiles.length === 0) return;
+    sendMutation.mutate({
+      conversationId: activeConversationId,
+      content: newMessage.trim(),
+      files: pendingFiles,
+    });
+    setPendingFiles([]);
+  };
+
+  const onFilesPicked = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    // Cap at 10 (matches backend) and 50 MB each.
+    const valid = [];
+    for (const f of files) {
+      if (f.size > 50 * 1024 * 1024) {
+        toast.error(`${f.name} is over 50 MB`);
+        continue;
+      }
+      valid.push(f);
+    }
+    setPendingFiles((prev) => [...prev, ...valid].slice(0, 10));
+    // Reset so picking the same file twice still triggers onChange
+    e.target.value = "";
+  };
+
+  const removePendingFile = (idx) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const formatBytes = (bytes) => {
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   // ── Derived data ────────────────────────────────────────────────────────────
@@ -628,6 +669,18 @@ const ChatPage = () => {
               ) : (
                 messages.map((msg) => {
                   const isMe = msg.senderId === user?.userId;
+                  // Backward compat: older messages have only mediaUrls; newer
+                  // ones carry rich metadata in attachments[].
+                  const attachments = Array.isArray(msg.attachments) && msg.attachments.length > 0
+                    ? msg.attachments
+                    : Array.isArray(msg.mediaUrls)
+                      ? msg.mediaUrls.map((url) => ({ url, type: 'image', name: '', mimeType: '', size: 0 }))
+                      : [];
+                  const images = attachments.filter((a) => a.type === 'image');
+                  const videos = attachments.filter((a) => a.type === 'video');
+                  const audios = attachments.filter((a) => a.type === 'audio');
+                  const files  = attachments.filter((a) => !['image', 'video', 'audio'].includes(a.type));
+
                   return (
                     <div
                       key={msg._id}
@@ -640,25 +693,105 @@ const ChatPage = () => {
                           </AvatarFallback>
                         </Avatar>
                       )}
-                      <div className={cn("max-w-[70%] space-y-1", isMe ? "items-end" : "items-start")}>
-                        <div className={cn(
-                          "px-4 py-2.5 rounded-2xl text-sm font-medium leading-relaxed relative",
-                          isMe
-                            ? "bg-teal-500 text-white rounded-br-sm shadow-sm"
-                            : "bg-white text-slate-800 rounded-bl-sm border border-slate-100 shadow-sm"
-                        )}>
-                          {msg.content}
-                          {/* Delete button on hover (own messages only) */}
-                          {isMe && (
-                            <button
-                              onClick={() => setDeletingId(msg._id)}
-                              className="absolute -top-2 -left-2 h-5 w-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                              title="Delete"
-                            >
-                              <Trash2 className="h-2.5 w-2.5" />
-                            </button>
-                          )}
-                        </div>
+                      <div className={cn("max-w-[75%] space-y-1.5 relative", isMe ? "items-end" : "items-start")}>
+                        {/* Image grid — first attachment type */}
+                        {images.length > 0 && (
+                          <div className={cn(
+                            "grid gap-1 rounded-2xl overflow-hidden",
+                            images.length === 1 ? "grid-cols-1" : "grid-cols-2"
+                          )}>
+                            {images.slice(0, 4).map((a, i) => (
+                              <button
+                                type="button"
+                                key={i}
+                                onClick={() => setLightbox({ url: a.url, name: a.name })}
+                                className="relative bg-slate-100 aspect-square overflow-hidden hover:opacity-90 transition-opacity"
+                              >
+                                <img src={a.url} alt={a.name || `image ${i + 1}`} className="w-full h-full object-cover" />
+                                {i === 3 && images.length > 4 && (
+                                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white font-black text-lg">
+                                    +{images.length - 4}
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Videos */}
+                        {videos.map((a, i) => (
+                          <video
+                            key={`v-${i}`}
+                            src={a.url}
+                            controls
+                            className="rounded-2xl max-w-full max-h-80 bg-black"
+                            preload="metadata"
+                          />
+                        ))}
+
+                        {/* Audio */}
+                        {audios.map((a, i) => (
+                          <div key={`a-${i}`} className={cn(
+                            "rounded-2xl px-3 py-2 border",
+                            isMe ? "bg-teal-500 border-teal-600" : "bg-white border-slate-100"
+                          )}>
+                            <audio src={a.url} controls className="w-64 max-w-full" />
+                          </div>
+                        ))}
+
+                        {/* Generic files (PDF, doc, zip, etc.) */}
+                        {files.map((a, i) => (
+                          <a
+                            key={`f-${i}`}
+                            href={a.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={a.name || undefined}
+                            className={cn(
+                              "flex items-center gap-3 rounded-2xl px-3 py-2.5 border transition-colors",
+                              isMe
+                                ? "bg-teal-500 border-teal-600 text-white hover:bg-teal-600"
+                                : "bg-white border-slate-100 text-slate-800 hover:bg-slate-50"
+                            )}
+                          >
+                            <div className={cn(
+                              "h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0",
+                              isMe ? "bg-white/20" : "bg-teal-50 text-teal-600"
+                            )}>
+                              <FileText className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold truncate">{a.name || "Attachment"}</p>
+                              <p className={cn("text-[10px] font-medium uppercase tracking-wider", isMe ? "text-white/80" : "text-slate-400")}>
+                                {a.mimeType?.split('/')[1] || 'file'}{a.size ? ` · ${formatBytes(a.size)}` : ''}
+                              </p>
+                            </div>
+                          </a>
+                        ))}
+
+                        {/* Text content (only render the bubble if there's text) */}
+                        {msg.content && (
+                          <div className={cn(
+                            "px-4 py-2.5 rounded-2xl text-sm font-medium leading-relaxed whitespace-pre-wrap break-words",
+                            isMe
+                              ? "bg-teal-500 text-white rounded-br-sm shadow-sm"
+                              : "bg-white text-slate-800 rounded-bl-sm border border-slate-100 shadow-sm"
+                          )}>
+                            {msg.content}
+                          </div>
+                        )}
+
+                        {/* Delete button on hover (own messages only) */}
+                        {isMe && (
+                          <button
+                            onClick={() => setDeletingId(msg._id)}
+                            className="absolute -top-2 -left-2 h-5 w-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+
                         <div className={cn("flex items-center gap-1", isMe ? "justify-end" : "justify-start")}>
                           <span className="text-[9px] font-bold text-slate-400">{timeOfDay(msg.createdAt)}</span>
                           {isMe && <CheckCheck className="h-3 w-3 text-teal-400" />}
@@ -673,23 +806,95 @@ const ChatPage = () => {
 
             {/* Input area */}
             <div className="px-5 py-4 border-t border-slate-100 bg-white">
-              <div className="flex items-end gap-3 bg-slate-100 rounded-2xl px-4 py-2 focus-within:ring-2 focus-within:ring-teal-200 focus-within:bg-white transition-all">
+              {/* Pending attachments preview */}
+              {pendingFiles.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {pendingFiles.map((f, i) => {
+                    const isImage = f.type.startsWith("image/");
+                    const previewUrl = isImage ? URL.createObjectURL(f) : null;
+                    return (
+                      <div
+                        key={`${f.name}-${i}`}
+                        className="relative group flex items-center gap-2 bg-slate-100 rounded-xl pl-2 pr-8 py-1.5 max-w-[220px]"
+                      >
+                        {isImage ? (
+                          <img
+                            src={previewUrl}
+                            alt={f.name}
+                            className="h-9 w-9 rounded-lg object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="h-9 w-9 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center flex-shrink-0">
+                            <FileText className="h-4 w-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-700 truncate">{f.name}</p>
+                          <p className="text-[10px] text-slate-400 font-medium">{formatBytes(f.size)}</p>
+                        </div>
+                        <button
+                          onClick={() => removePendingFile(i)}
+                          className="absolute right-1.5 top-1.5 h-5 w-5 rounded-full bg-slate-300 hover:bg-red-500 text-white flex items-center justify-center transition-colors"
+                          title="Remove"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Hidden file inputs */}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                hidden
+                onChange={onFilesPicked}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={onFilesPicked}
+              />
+
+              <div className="flex items-end gap-2 bg-slate-100 rounded-2xl px-3 py-2 focus-within:ring-2 focus-within:ring-teal-200 focus-within:bg-white transition-all">
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="h-9 w-9 flex-shrink-0 flex items-center justify-center rounded-xl text-slate-500 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                  title="Attach photos / videos"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-9 w-9 flex-shrink-0 flex items-center justify-center rounded-xl text-slate-500 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                  title="Attach file"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
                 <textarea
                   ref={inputRef}
                   value={newMessage}
                   onChange={e => setNewMessage(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Type a message..."
+                  placeholder={pendingFiles.length ? "Add a caption..." : "Type a message..."}
                   rows={1}
                   className="flex-1 bg-transparent text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none resize-none py-1.5 max-h-24"
                   style={{ minHeight: "36px" }}
                 />
                 <button
                   onClick={handleSend}
-                  disabled={!newMessage.trim() || sendMutation.isPending}
+                  disabled={(!newMessage.trim() && pendingFiles.length === 0) || sendMutation.isPending}
                   className={cn(
                     "h-9 w-9 flex-shrink-0 flex items-center justify-center rounded-xl transition-all",
-                    newMessage.trim()
+                    (newMessage.trim() || pendingFiles.length > 0)
                       ? "bg-teal-500 text-white hover:bg-teal-600 shadow-sm"
                       : "bg-slate-200 text-slate-400 cursor-not-allowed"
                   )}
@@ -762,6 +967,39 @@ const ChatPage = () => {
             </div>
           </div>
         </>
+      )}
+
+      {/* Image lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setLightbox(null); }}
+            className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <img
+            src={lightbox.url}
+            alt={lightbox.name || "Preview"}
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <a
+            href={lightbox.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={lightbox.name || undefined}
+            onClick={(e) => e.stopPropagation()}
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-full text-xs font-black uppercase tracking-wide transition-colors"
+          >
+            Open original
+          </a>
+        </div>
       )}
     </div>
   );

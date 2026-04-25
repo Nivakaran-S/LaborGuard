@@ -164,24 +164,61 @@ const sendMessage = async (req, res) => {
             return res.status(403).json({ error: 'Sender is not a participant in this conversation' });
         }
 
+        const attachments = [];
         const mediaUrls = [];
         if (req.files && req.files.length > 0) {
-            const uploadPromises = req.files.map(file => uploadToCloudinary(file.buffer));
-            const results = await Promise.all(uploadPromises);
-            mediaUrls.push(...results.map(result => result.secure_url));
+            const results = await Promise.all(
+                req.files.map((file) => uploadToCloudinary(file.buffer, {
+                    // Force a stable filename component so the download URL
+                    // surfaces the original name when the client follows it.
+                    public_id: undefined,
+                    use_filename: true,
+                    unique_filename: true,
+                }))
+            );
+            results.forEach((result, i) => {
+                const file = req.files[i];
+                const mime = file.mimetype || '';
+                let bucket = 'file';
+                if (mime.startsWith('image/')) bucket = 'image';
+                else if (mime.startsWith('video/')) bucket = 'video';
+                else if (mime.startsWith('audio/')) bucket = 'audio';
+
+                attachments.push({
+                    url: result.secure_url,
+                    type: bucket,
+                    name: file.originalname || '',
+                    mimeType: mime,
+                    size: file.size || 0,
+                });
+                mediaUrls.push(result.secure_url);
+            });
         }
 
         const newMessage = new Message({
             conversationId,
             senderId,
             content: content || '',
+            attachments,
             mediaUrls,
             readBy: [senderId]
         });
 
         await newMessage.save();
 
-        const previewText = content ? content.substring(0, 50) + (content.length > 50 ? '...' : '') : 'Sent an attachment';
+        // Smarter conversation preview when there's no text — make it obvious
+        // what's actually waiting in the thread.
+        let previewText;
+        if (content && content.trim()) {
+            previewText = content.substring(0, 50) + (content.length > 50 ? '...' : '');
+        } else if (attachments.length > 0) {
+            const first = attachments[0];
+            const others = attachments.length > 1 ? ` +${attachments.length - 1}` : '';
+            const labels = { image: '📷 Photo', video: '🎥 Video', audio: '🎙 Audio', file: '📎 File' };
+            previewText = `${labels[first.type] || labels.file}${first.name ? `: ${first.name}` : ''}${others}`;
+        } else {
+            previewText = 'Sent an attachment';
+        }
 
         conversation.lastMessage = {
             senderId,
