@@ -1,8 +1,12 @@
 # Render blueprint for LaborGuard backend microservices.
-# All secret values (MONGODB_URI, KAFKA_BROKER, JWT secrets, Cloudinary, Resend,
-# OpenAI, Perspective, etc.) must be configured per-service in the Render dashboard.
-# The `sync: false` flag below tells Render to ignore these in the blueprint and
-# keep whatever is already set in the dashboard.
+#
+# Cross-service eventing is HTTP-based (no Kafka). Producers POST to
+# `/api/internal/events/:topic` on consumer services, guarded by a shared
+# INTERNAL_SERVICE_SECRET header.
+#
+# Secret values (MONGODB_URI, JWT secrets, INTERNAL_SERVICE_SECRET, Cloudinary,
+# Resend, OpenAI, GROQ, Google OAuth, Centrifugo) must be configured per-service
+# in the Render dashboard. `sync: false` keeps the dashboard value authoritative.
 
 services:
   # ── Auth Service ───────────────────────────────────────────────────────────
@@ -13,7 +17,7 @@ services:
     plan: free
     rootDir: backend/services/auth-service
     buildCommand: npm ci --no-audit --no-fund
-    startCommand: node src/index.js
+    startCommand: node src/server.js
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -27,21 +31,32 @@ services:
         sync: false
       - key: MONGODB_DB_NAME
         value: laborguard-auth
-      - key: KAFKA_BROKER
-        sync: false
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: SESSION_SECRET
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      - key: GOOGLE_CALLBACK_URL
+        value: https://laborguard-auth-service.onrender.com/api/auth/google/callback
+      - key: FRONTEND_URL
+        value: https://labor-guard.vercel.app
       - key: GROQ_API_KEY
         sync: false
-      # Validates x-internal-secret on /api/auth/internal/* routes (called by notification-service)
+      - key: GEMINI_API_KEY
+        sync: false
+      # Validates x-internal-secret on /api/auth/internal/* (called by notification-service).
       - key: INTERNAL_SERVICE_SECRET
         sync: false
+      # auth-service emits cross-service events over HTTP to these consumers.
+      - key: NOTIFICATION_SERVICE_URL
+        value: https://laborguard-notification-service.onrender.com
+      - key: COMMUNITY_SERVICE_URL
+        value: https://laborguard-community-service.onrender.com
 
   # ── Community Service ──────────────────────────────────────────────────────
   - type: web
@@ -65,8 +80,6 @@ services:
         sync: false
       - key: MONGODB_DB_NAME
         value: laborguard-community
-      - key: KAFKA_BROKER
-        sync: false
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: CLOUDINARY_CLOUD_NAME
@@ -81,6 +94,11 @@ services:
         value: "0.7"
       - key: NSFW_THRESHOLD
         value: "0.5"
+      # Validates x-internal-secret on /api/internal/events/* and emits its own.
+      - key: INTERNAL_SERVICE_SECRET
+        sync: false
+      - key: NOTIFICATION_SERVICE_URL
+        value: https://laborguard-notification-service.onrender.com
 
   # ── Complaint Service ──────────────────────────────────────────────────────
   - type: web
@@ -89,7 +107,8 @@ services:
     region: singapore
     plan: free
     rootDir: backend/services/complaint-service
-    buildCommand: npm ci --no-audit --no-fund
+    # cloudinary peer-dep mismatch with multer-storage-cloudinary — known and harmless.
+    buildCommand: npm ci --no-audit --no-fund --legacy-peer-deps
     startCommand: node src/index.js
     healthCheckPath: /health
     autoDeploy: true
@@ -104,8 +123,6 @@ services:
         sync: false
       - key: MONGODB_DB_NAME
         value: laborguard-complaint
-      - key: KAFKA_BROKER
-        sync: false
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: CLOUDINARY_CLOUD_NAME
@@ -116,6 +133,20 @@ services:
         sync: false
       - key: RESEND_API_KEY
         sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: FRONTEND_URL
+        value: https://labor-guard.vercel.app
+      - key: INTERNAL_SERVICE_SECRET
+        sync: false
+      - key: NOTIFICATION_SERVICE_URL
+        value: https://laborguard-notification-service.onrender.com
+      - key: COMMUNITY_SERVICE_URL
+        value: https://laborguard-community-service.onrender.com
+      - key: MESSAGING_SERVICE_URL
+        value: https://laborguard-messaging-service.onrender.com
 
   # ── Notification Service ───────────────────────────────────────────────────
   - type: web
@@ -139,13 +170,13 @@ services:
         sync: false
       - key: MONGODB_DB_NAME
         value: laborguard-notification
-      - key: KAFKA_BROKER
-        sync: false
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: RESEND_API_KEY
         sync: false
-      # Cross-service email lookup — talks to auth-service over HTTP
+      - key: SYSTEM_DEFAULT_EMAIL
+        sync: false
+      # Cross-service: receives events from siblings, looks up user emails on auth-service.
       - key: AUTH_SERVICE_URL
         value: https://laborguard-auth-service.onrender.com
       - key: INTERNAL_SERVICE_SECRET
@@ -175,14 +206,24 @@ services:
         sync: false
       - key: MONGODB_DB_NAME
         value: laborguard-messaging
-      - key: KAFKA_BROKER
-        sync: false
       - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
         sync: false
       - key: CENTRIFUGO_URL
         sync: false
+      - key: CENTRIFUGO_API_URL
+        sync: false
       - key: CENTRIFUGO_API_KEY
         sync: false
+      - key: INTERNAL_SERVICE_SECRET
+        sync: false
+      - key: NOTIFICATION_SERVICE_URL
+        value: https://laborguard-notification-service.onrender.com
 
   # ── Job Service ────────────────────────────────────────────────────────────
   - type: web
@@ -191,7 +232,7 @@ services:
     region: singapore
     plan: free
     rootDir: backend/services/job-service
-    buildCommand: npm ci --no-audit --no-fund
+    buildCommand: npm ci --no-audit --no-fund --include=dev
     startCommand: node src/server.js
     healthCheckPath: /health
     autoDeploy: true
@@ -212,3 +253,11 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: EMAIL_SERVICE
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: FRONTEND_URL
+        value: https://labor-guard.vercel.app

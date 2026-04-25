@@ -1,59 +1,65 @@
 /**
- * kafkaProducer.js — Auth Service
+ * Cross-service event emitter — HTTP edition (no Kafka).
  *
- * Publishes domain events from the auth-service to Kafka.
- * The community-service subscribes to the 'auth-events' topic and
- * listens for 'user_registered' to automatically create UserProfile documents.
+ * Same `emitEvent(topic, type, payload)` signature so callers don't change.
+ * POSTs to sibling services' `/api/internal/events/:topic` guarded by
+ * `INTERNAL_SERVICE_SECRET`.
  *
- * connectProducer() must be called once at startup (see server.js).
+ * Routing rules (auth-service):
+ *   auth-events → community-service (user_registered → create UserProfile)
+ *               → notification-service (user_warned/suspended/banned)
  */
-const { Kafka } = require('kafkajs');
 
 const SERVICE_NAME = process.env.SERVICE_NAME || 'auth-service';
-const KAFKA_BROKER  = process.env.KAFKA_BROKER  || 'localhost:9092';
+const NOTIFICATION_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:5004';
+const COMMUNITY_URL = process.env.COMMUNITY_SERVICE_URL || 'http://community-service:5002';
+const SECRET = process.env.INTERNAL_SERVICE_SECRET || '';
 
-const kafka = new Kafka({
-    clientId: SERVICE_NAME,
-    brokers: [KAFKA_BROKER],
-    retry: {
-        initialRetryTime: 1000,
-        retries: 5,
-    },
-});
-
-const producer = kafka.producer();
-let isConnected = false;
-
-const connectProducer = async () => {
-    if (isConnected) return;
-    try {
-        await producer.connect();
-        isConnected = true;
-        console.log(`[${SERVICE_NAME}] Kafka producer connected`);
-    } catch (error) {
-        // Non-fatal: app still works without Kafka, community UserProfiles
-        // won't auto-create but no crash.
-        console.error(`[${SERVICE_NAME}] Kafka producer connection error:`, error.message);
-    }
+const ROUTES = {
+    'auth-events': [NOTIFICATION_URL, COMMUNITY_URL],
 };
 
-const emitEvent = async (topic, eventType, payload) => {
-    if (!isConnected) {
-        console.warn(`[${SERVICE_NAME}] Kafka not connected — skipping event: ${eventType}`);
+const postEvent = async (baseUrl, topic, eventType, payload) => {
+    if (!SECRET) {
+        console.warn(`[${SERVICE_NAME}] INTERNAL_SERVICE_SECRET not set — skipping ${eventType}`);
         return;
     }
     try {
-        await producer.send({
-            topic,
-            messages: [{
-                key   : eventType,
-                value : JSON.stringify({ type: eventType, payload }),
-            }],
+        const res = await fetch(`${baseUrl}/api/internal/events/${topic}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-internal-secret': SECRET,
+            },
+            body: JSON.stringify({
+                type: eventType,
+                timestamp: new Date().toISOString(),
+                payload,
+            }),
+            signal: AbortSignal.timeout(5000),
         });
-        console.log(`[${SERVICE_NAME}] Emitted event: ${eventType} → ${topic}`);
-    } catch (error) {
-        console.error(`[${SERVICE_NAME}] Failed to emit event ${eventType}:`, error.message);
+        if (!res.ok) {
+            console.warn(`[${SERVICE_NAME}] ${baseUrl} returned ${res.status} for ${eventType}`);
+        } else {
+            console.log(`[${SERVICE_NAME}] Posted ${eventType} to ${baseUrl}`);
+        }
+    } catch (err) {
+        console.error(`[${SERVICE_NAME}] Failed to emit ${eventType}: ${err.message}`);
     }
 };
 
-module.exports = { connectProducer, emitEvent };
+const emitEvent = (topic, eventType, payload) => {
+    const targets = ROUTES[topic];
+    if (!targets) {
+        console.warn(`[${SERVICE_NAME}] No HTTP route configured for topic ${topic}`);
+        return;
+    }
+    targets.forEach((url) => {
+        postEvent(url, topic, eventType, payload).catch(() => {});
+    });
+};
+
+// Legacy: server.js calls connectProducer() once at boot. No-op now.
+const connectProducer = async () => {};
+
+module.exports = { emitEvent, connectProducer };

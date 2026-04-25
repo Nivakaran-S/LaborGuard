@@ -8,60 +8,20 @@
 #     backend/
 #     frontend/
 #
+# Cross-service eventing is HTTP-based (no Kafka). Producers POST to
+# `/api/internal/events/:topic` on consumer services, guarded by
+# INTERNAL_SERVICE_SECRET. See backend/services/*/src/utils/kafkaProducer.js
+# for the legacy-named-but-now-HTTP emitter.
+#
 # Start everything:   docker compose up --build
-# Backend only:       docker compose up --build zookeeper kafka centrifugo auth-service community-service complaint-service notification-service messaging-service job-service
+# Backend only:       docker compose up --build centrifugo auth-service community-service complaint-service notification-service messaging-service job-service
 # ══════════════════════════════════════════════════════════════════════════════
 
 services:
 
   # ════════════════════════════════════════
-  # INFRASTRUCTURE
+  # INFRASTRUCTURE — only Centrifugo now (Kafka removed in favour of HTTP)
   # ════════════════════════════════════════
-
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: laborguard-zookeeper
-    ports:
-      - "2181:2181"
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    networks:
-      - laborguard-network
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "2181"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: laborguard-kafka
-    depends_on:
-      zookeeper:
-        condition: service_healthy
-    ports:
-      - "9092:9092"     # container-to-container  (services → kafka:9092)
-      - "29092:29092"   # host access             (Kafka UI / dev tools → localhost:29092)
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_LOG_RETENTION_HOURS: 168
-    networks:
-      - laborguard-network
-    healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
-    restart: unless-stopped
 
   centrifugo:
     image: centrifugo/centrifugo:v5
@@ -87,7 +47,7 @@ services:
 
   auth-service:
     build:
-      context: ./backend/services/auth-service    # ← was ./services/auth-service
+      context: ./backend/services/auth-service
       dockerfile: Dockerfile
     image: laborguard/auth-service:latest
     container_name: laborguard-auth-service
@@ -101,8 +61,6 @@ services:
       - SERVICE_NAME=auth-service
       - MONGODB_URI=${MONGODB_ATLAS_BASE}
       - MONGODB_DB_NAME=laborguard-auth
-      - KAFKA_BROKER=kafka:9092
-      - KAFKAJS_NO_PARTITIONER_WARNING=1
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - SESSION_SECRET=${SESSION_SECRET}
@@ -113,11 +71,10 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION}
-      # Validates x-internal-secret on /api/auth/internal/* routes
       - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
-    depends_on:
-      kafka:
-        condition: service_healthy
+      # auth-service emits cross-service events over HTTP to these consumers
+      - NOTIFICATION_SERVICE_URL=http://notification-service:5004
+      - COMMUNITY_SERVICE_URL=http://community-service:5002
     volumes:
       - ./backend/services/auth-service:/app
       - /app/node_modules
@@ -134,7 +91,7 @@ services:
 
   community-service:
     build:
-      context: ./backend/services/community-service    # ← was ./services/community-service
+      context: ./backend/services/community-service
       dockerfile: Dockerfile
     image: laborguard/community-service:latest
     container_name: laborguard-community-service
@@ -148,7 +105,6 @@ services:
       - SERVICE_NAME=community-service
       - MONGODB_URI=${MONGODB_ATLAS_BASE}
       - MONGODB_DB_NAME=laborguard-community
-      - KAFKA_BROKER=kafka:9092
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
       - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
@@ -156,9 +112,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - TOXICITY_THRESHOLD=0.7
       - NSFW_THRESHOLD=0.5
-    depends_on:
-      kafka:
-        condition: service_healthy
+      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
+      - NOTIFICATION_SERVICE_URL=http://notification-service:5004
     networks:
       - laborguard-network
     dns: [1.1.1.1, 8.8.8.8]
@@ -172,7 +127,7 @@ services:
 
   complaint-service:
     build:
-      context: ./backend/services/complaint-service    # ← was ./services/complaint-service
+      context: ./backend/services/complaint-service
       dockerfile: Dockerfile
     image: laborguard/complaint-service:latest
     container_name: laborguard-complaint-service
@@ -186,7 +141,6 @@ services:
       - SERVICE_NAME=complaint-service
       - MONGODB_URI=${MONGODB_ATLAS_BASE}
       - MONGODB_DB_NAME=laborguard-complaint
-      - KAFKA_BROKER=kafka:9092
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
       - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
@@ -194,9 +148,10 @@ services:
       - EMAIL_SERVICE=${EMAIL_SERVICE}
       - EMAIL_USER=${EMAIL_USER}
       - EMAIL_PASSWORD=${EMAIL_PASSWORD}
-    depends_on:
-      kafka:
-        condition: service_healthy
+      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
+      - NOTIFICATION_SERVICE_URL=http://notification-service:5004
+      - COMMUNITY_SERVICE_URL=http://community-service:5002
+      - MESSAGING_SERVICE_URL=http://messaging-service:5005
     networks:
       - laborguard-network
     dns: [1.1.1.1, 8.8.8.8]
@@ -210,7 +165,7 @@ services:
 
   notification-service:
     build:
-      context: ./backend/services/notification-service    # ← was ./services/notification-service
+      context: ./backend/services/notification-service
       dockerfile: Dockerfile
     image: laborguard/notification-service:latest
     container_name: laborguard-notification-service
@@ -224,20 +179,17 @@ services:
       - SERVICE_NAME=notification-service
       - MONGODB_URI=${MONGODB_ATLAS_BASE}
       - MONGODB_DB_NAME=laborguard-notification
-      - KAFKA_BROKER=kafka:9092
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - SYSTEM_DEFAULT_EMAIL=${SYSTEM_DEFAULT_EMAIL}
       - EMAIL_SERVICE=${EMAIL_SERVICE}
       - EMAIL_USER=${EMAIL_USER}
       - EMAIL_PASSWORD=${EMAIL_PASSWORD}
-      # Cross-service lookup: talks to auth-service over HTTP with shared secret
+      # Cross-service: looks up user emails on auth-service via HTTP+secret.
       - AUTH_SERVICE_URL=http://auth-service:5001
       - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
       - APP_URL=${APP_URL:-https://labor-guard.vercel.app}
     depends_on:
-      kafka:
-        condition: service_healthy
       auth-service:
         condition: service_started
     networks:
@@ -253,7 +205,7 @@ services:
 
   messaging-service:
     build:
-      context: ./backend/services/messaging-service    # ← was ./services/messaging-service
+      context: ./backend/services/messaging-service
       dockerfile: Dockerfile
     image: laborguard/messaging-service:latest
     container_name: laborguard-messaging-service
@@ -267,16 +219,15 @@ services:
       - SERVICE_NAME=messaging-service
       - MONGODB_URI=${MONGODB_ATLAS_BASE}
       - MONGODB_DB_NAME=laborguard-messaging
-      - KAFKA_BROKER=kafka:9092
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
       - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
       - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
       - CENTRIFUGO_API_KEY=${CENTRIFUGO_API_KEY}
       - CENTRIFUGO_API_URL=http://centrifugo:8000/api
+      - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
+      - NOTIFICATION_SERVICE_URL=http://notification-service:5004
     depends_on:
-      kafka:
-        condition: service_healthy
       centrifugo:
         condition: service_healthy
     networks:
@@ -292,7 +243,7 @@ services:
 
   job-service:
     build:
-      context: ./backend/services/job-service    # ← was ./services/job-service
+      context: ./backend/services/job-service
       dockerfile: Dockerfile
     image: laborguard/job-service:latest
     container_name: laborguard-job-service
@@ -306,11 +257,8 @@ services:
       - SERVICE_NAME=job-service
       - MONGODB_URI=${MONGODB_ATLAS_BASE}
       - MONGODB_DB_NAME=laborguard-jobs
-      - KAFKA_BROKER=kafka:9092
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
-    depends_on:
-      kafka:
-        condition: service_healthy
+      # job-service has no cross-service events to emit, so no INTERNAL_* envs.
     networks:
       - laborguard-network
     dns: [1.1.1.1, 8.8.8.8]
@@ -328,7 +276,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend    # ← was ../frontend (fragile relative path, now clean)
+      context: ./frontend
       dockerfile: Dockerfile
       args:
         VITE_AUTH_SERVICE_URL: ${VITE_AUTH_SERVICE_URL:-http://localhost:5001}
@@ -337,8 +285,8 @@ services:
         VITE_NOTIFICATION_SERVICE_URL: ${VITE_NOTIFICATION_SERVICE_URL:-http://localhost:5004}
         VITE_MESSAGING_SERVICE_URL: ${VITE_MESSAGING_SERVICE_URL:-http://localhost:5005}
         VITE_JOB_SERVICE_URL: ${VITE_JOB_SERVICE_URL:-http://localhost:5006}
-        VITE_CENTRIFUGO_URL: ${VITE_CENTRIFUGO_URL:-ws://localhost:8000/connection/websocket}  # ← added
-        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}    # ← added (frontend OAuth)
+        VITE_CENTRIFUGO_URL: ${VITE_CENTRIFUGO_URL:-ws://localhost:8000/connection/websocket}
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
     image: laborguard/frontend:latest
     container_name: laborguard-frontend
     ports:

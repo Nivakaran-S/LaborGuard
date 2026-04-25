@@ -1,56 +1,20 @@
-const { Kafka } = require('kafkajs');
+/**
+ * Cross-service event emitter — HTTP edition (no Kafka).
+ *
+ * notification-service is currently a consumer-only service (it doesn't emit
+ * cross-service events anywhere). This module remains as a no-op shim so the
+ * `const { emitEvent } = require('../utils/kafkaProducer')` import in
+ * notificationController.js keeps resolving — and so any future producer code
+ * has the same `emitEvent(topic, type, payload)` signature available.
+ */
 
 const SERVICE_NAME = process.env.SERVICE_NAME || 'notification-service';
-const KAFKA_BROKER = process.env.KAFKA_BROKER || 'localhost:9092';
 
-const kafka = new Kafka({
-    clientId: SERVICE_NAME,
-    brokers: [KAFKA_BROKER],
-    retry: {
-        initialRetryTime: 1000,
-        retries: 10
-    }
-});
-
-const producer = kafka.producer();
-
-let isConnected = false;
-
-const connectProducer = async () => {
-    if (isConnected) return;
-    try {
-        await producer.connect();
-        isConnected = true;
-        console.log(`[${SERVICE_NAME}] Kafka producer connected`);
-    } catch (error) {
-        console.error(`[${SERVICE_NAME}] Event producer connection error:`, error.message);
-    }
+const emitEvent = (topic, eventType /* , payload */) => {
+    // No-op: notification-service has no downstream consumers today.
+    console.log(`[${SERVICE_NAME}] emitEvent called (no-op): ${topic}/${eventType}`);
 };
 
-const emitEvent = async (topic, eventType, payload) => {
-    if (!isConnected) await connectProducer();
+const connectProducer = async () => {}; // legacy no-op
 
-    try {
-        const message = {
-            type: eventType,
-            timestamp: new Date().toISOString(),
-            payload
-        };
-
-        await producer.send({
-            topic,
-            messages: [
-                { value: JSON.stringify(message) }
-            ]
-        });
-
-        console.log(`[${SERVICE_NAME}] Emitted ${eventType} to topic ${topic}`);
-    } catch (error) {
-        console.error(`[${SERVICE_NAME}] Failed to emit event:`, error.message);
-    }
-};
-
-module.exports = {
-    connectProducer,
-    emitEvent
-};
+module.exports = { emitEvent, connectProducer };

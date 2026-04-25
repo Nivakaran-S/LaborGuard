@@ -68,7 +68,7 @@ export const messageClient = axios.create({
 });
 
 export const notificationClient = axios.create({
-  baseURL: `${import.meta.env.VITE_NOTIFICATION_SERVICE_URL || 'http://localhost:3004'}/api`,
+  baseURL: `${import.meta.env.VITE_NOTIFICATION_SERVICE_URL || 'http://localhost:5004'}/api`,
 });
 
 // ── Attach interceptors to every client ──────────────────────────────────────
