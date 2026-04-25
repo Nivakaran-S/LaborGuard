@@ -65,11 +65,26 @@ const Sidebar = ({ className }) => {
 
   const navLinks = getNavLinks();
 
-  // FIX: isActive now handles query-string links (admin tabs) correctly
+  // Active when:
+  //   - the href has a query string and matches the full URL exactly, OR
+  //   - the pathname matches href exactly, OR
+  //   - the pathname is a child of href (e.g. /worker/complaints/abc123 keeps
+  //     "My Case Files" active) BUT NOT when another nav link is a longer match
+  //     — without that guard, `/worker/complaints/new` would highlight both
+  //     "New Complaint" AND "My Case Files".
   const isActive = (href) => {
     const fullPath = location.pathname + location.search;
     if (href.includes('?')) return fullPath === href;
-    return location.pathname === href || location.pathname.startsWith(href + '/');
+    if (location.pathname === href) return true;
+    if (!location.pathname.startsWith(href + '/')) return false;
+
+    const moreSpecificMatch = navLinks.some((other) =>
+      other.href !== href &&
+      !other.href.includes('?') &&
+      other.href.startsWith(href + '/') &&
+      (location.pathname === other.href || location.pathname.startsWith(other.href + '/'))
+    );
+    return !moreSpecificMatch;
   };
 
   const getSettingsPath = () => {
