@@ -312,9 +312,12 @@ const getEmployerJobs = async (req, res, next) => {
         const page  = parseInt(req.query.page)  || 1;
         const limit = parseInt(req.query.limit) || 10;
 
+        // Field is `employerId` per Job.js schema and createJob handler.
+        // Earlier `postedBy` usage was a mismatch — every employer dashboard
+        // returned 0 jobs because the field doesn't exist.
         const Job = require('../models/Job');
-        const total = await Job.countDocuments({ postedBy: employerId });
-        const jobs  = await Job.find({ postedBy: employerId })
+        const total = await Job.countDocuments({ employerId });
+        const jobs  = await Job.find({ employerId })
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
             .limit(limit)
