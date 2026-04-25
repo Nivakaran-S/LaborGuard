@@ -19,6 +19,15 @@ const registerUser = async (userData) => {
     validUserData.isApproved = false;
   }
 
+  // Normalise email before lookup — the schema lowercases on save, but
+  // findOne is case-sensitive, so without this the duplicate-detection
+  // would miss "Foo@x.com" vs "foo@x.com" and the user would only learn
+  // about the conflict via a Mongo duplicate-key error instead of our
+  // "Email already exists" message.
+  if (typeof validUserData.email === 'string') {
+    validUserData.email = validUserData.email.toLowerCase().trim();
+  }
+
   const existingEmail = await User.findOne({ email: validUserData.email });
   if (existingEmail) throw { statusCode: 400, message: 'Email already exists' };
 

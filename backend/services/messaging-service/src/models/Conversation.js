@@ -21,6 +21,14 @@ const conversationSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    // Denormalized display info per participant — written at conversation
+    // creation time so the conversation list can show "Jane Doe (lawyer)"
+    // without a per-render cross-service call to auth-service. Keyed by userId.
+    // Mongoose Mixed type so we can store an arbitrary userId → {name,email,role} map.
+    participantInfo: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {},
+    },
     lastMessage: {
         senderId: String,
         content: String,

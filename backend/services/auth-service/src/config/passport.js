@@ -9,8 +9,17 @@ passport.use(new GoogleStrategy({
 },
     async (accessToken, refreshToken, profile, done) => {
         try {
-            // Check if user already exists in our db
-            let user = await User.findOne({ email: profile.emails[0].value });
+            // Lowercase the email Google hands us before the lookup. The User
+            // schema lowercases on save, but `findOne` is case-sensitive — so
+            // a user who registered with "Foo@Gmail.com" and then logs in via
+            // Google (which may surface "foo@gmail.com" or "Foo@Gmail.com")
+            // could otherwise miss the existing record and either trip the
+            // unique index or, worse, create an orphan account.
+            const email = (profile.emails?.[0]?.value || '').toLowerCase().trim();
+            if (!email) {
+                return done(null, false, { message: 'Google did not return an email address.' });
+            }
+            let user = await User.findOne({ email });
 
             if (user) {
                 // If the user is NOT a worker, reject the Google Login
@@ -34,7 +43,7 @@ passport.use(new GoogleStrategy({
                 const newUser = {
                     firstName,
                     lastName,
-                    email: profile.emails[0].value,
+                    email,
                     phone: dummyPhone,
                     birthDate: new Date('1990-01-01'), // Mandatory placeholder
                     password: 'google_oauth_placeholder_' + Date.now(), // Random placeholder

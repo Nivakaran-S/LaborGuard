@@ -7,7 +7,7 @@ const { publishToChannel } = require('../utils/centrifugoClient');
 const createConversation = async (req, res) => {
     try {
         const requesterId = req.user.userId;                    // [AUTH] always from JWT
-        const { participantRoles, isGroup, groupName } = req.body;
+        const { participantRoles, isGroup, groupName, participantInfo } = req.body;
         let { participants } = req.body;
 
         // Drop nullish / empty / non-string entries so a stale frontend cache
@@ -28,12 +28,33 @@ const createConversation = async (req, res) => {
             return res.status(400).json({ error: 'At least 2 distinct participants required' });
         }
 
+        // Build the per-participant display map. Frontend sends what it knows
+        // about the recipients from the search dropdown; we always backfill the
+        // caller's own info from their JWT so the receiver can see who messaged
+        // them without depending on the frontend to remember its own identity.
+        const cleanParticipantInfo = {};
+        if (participantInfo && typeof participantInfo === 'object') {
+            for (const [uid, info] of Object.entries(participantInfo)) {
+                if (typeof uid !== 'string' || !uid) continue;
+                if (info && typeof info === 'object') {
+                    cleanParticipantInfo[uid] = {
+                        name: typeof info.name === 'string' ? info.name : '',
+                        email: typeof info.email === 'string' ? info.email : '',
+                        role: typeof info.role === 'string' ? info.role : '',
+                    };
+                }
+            }
+        }
+        if (requesterId && !cleanParticipantInfo[requesterId]) {
+            cleanParticipantInfo[requesterId] = {
+                name: req.user.name || req.user.email || '',
+                email: req.user.email || '',
+                role: req.user.role || '',
+            };
+        }
+
         // 1-1: try to find an existing conversation for the same participants
         // (sort first so [A,B] matches [B,A]); create only if none exists.
-        // The previous attempt at a single atomic upsert tripped on
-        // ConflictingUpdateOperators because $setOnInsert fields overlapped the
-        // filter; falling back to find-then-create is good enough here — the
-        // race window is tiny and a stray duplicate isn't catastrophic.
         if (!isGroup) {
             const sortedParticipants = [...participants].sort();
             const existing = await Conversation.findOne({
@@ -41,6 +62,14 @@ const createConversation = async (req, res) => {
                 participants: { $all: sortedParticipants, $size: sortedParticipants.length },
             });
             if (existing) {
+                // Merge any fresh display info into the existing doc so older
+                // conversations that pre-date this field gradually fill in.
+                const merged = { ...(existing.participantInfo || {}), ...cleanParticipantInfo };
+                if (JSON.stringify(merged) !== JSON.stringify(existing.participantInfo || {})) {
+                    existing.participantInfo = merged;
+                    existing.markModified('participantInfo');
+                    await existing.save();
+                }
                 return res.status(200).json(existing);
             }
             const conversation = await Conversation.create({
@@ -48,6 +77,7 @@ const createConversation = async (req, res) => {
                 participantRoles: Array.isArray(participantRoles) ? participantRoles : [],
                 isGroup: false,
                 groupName: '',
+                participantInfo: cleanParticipantInfo,
             });
             return res.status(201).json(conversation);
         }
@@ -56,7 +86,8 @@ const createConversation = async (req, res) => {
             participants,
             participantRoles: Array.isArray(participantRoles) ? participantRoles : [],
             isGroup: true,
-            groupName: groupName || ''
+            groupName: groupName || '',
+            participantInfo: cleanParticipantInfo,
         });
 
         await newConversation.save();

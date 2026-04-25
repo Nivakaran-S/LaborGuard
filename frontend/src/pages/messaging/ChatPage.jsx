@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { messageApi } from "@/api/messageApi";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useMessagingStore } from "@/store/messagingStore";
@@ -119,10 +120,25 @@ const NewConversationModal = ({ onClose, onCreated }) => {
 
   const createMutation = useMutation({
     mutationFn: (data) => messageApi.createConversation(data),
-    onSuccess: (res) => {
+    onSuccess: (res, vars) => {
       queryClient.invalidateQueries(["conversations"]);
+      // Confirm who the conversation was started with — surfaces the
+      // wrong-recipient case (you searched "Niv" and picked the lawyer-named-
+      // similarly worker by mistake) before you start typing.
+      const target = (vars?.participantInfo &&
+        Object.entries(vars.participantInfo)
+          .filter(([uid]) => uid !== user.userId)
+          .map(([, info]) => info)[0]) || null;
+      if (target?.name) {
+        toast.success(`Chat started with ${target.name}`, {
+          description: target.email ? `${target.email} · ${target.role || "user"}` : target.role,
+        });
+      }
       onCreated(res.data._id || res.data.data?._id);
-    }
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to start chat");
+    },
   });
 
   const handleSelect = (selectedUser) => {
@@ -132,10 +148,32 @@ const NewConversationModal = ({ onClose, onCreated }) => {
 
   const handleCreate = () => {
     const participantIds = [user.userId, ...selectedUsers.map(u => u.userId)];
+    // Denormalized display info — backend stores this on the Conversation
+    // doc so both sides of a 1-1 chat can render real names + email + role
+    // without a per-render cross-service call.
+    const participantInfo = {};
+    const myName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email || "";
+    if (user.userId) {
+      participantInfo[user.userId] = {
+        name: myName,
+        email: user.email || "",
+        role: user.role || "",
+      };
+    }
+    selectedUsers.forEach((u) => {
+      if (u.userId) {
+        participantInfo[u.userId] = {
+          name: u.name || u.email || "",
+          email: u.email || "",
+          role: u.role || "",
+        };
+      }
+    });
     createMutation.mutate({
       participants: participantIds,
       isGroup: mode === "group",
-      groupName: mode === "group" ? groupName : ""
+      groupName: mode === "group" ? groupName : "",
+      participantInfo,
     });
   };
 
@@ -317,10 +355,19 @@ const ChatPage = () => {
   const getConvDisplayName = (conv) => {
     if (!conv) return "";
     if (conv.isGroup) return conv.groupName || "Group Chat";
-    // Participants are stored as userId strings — show shortened ID as fallback
     const otherId = conv.participants?.find(p => p !== user?.userId);
     if (!otherId) return "Unknown user";
-    return conv.participantNames?.[otherId] || `User ${otherId.slice(-6)}`;
+    // Backend stores per-user display info on the conversation doc since the
+    // recent "best fix" — fall back to a short id if a legacy conversation
+    // pre-dated the field.
+    const info = conv.participantInfo?.[otherId];
+    return info?.name || conv.participantNames?.[otherId] || `User ${otherId.slice(-6)}`;
+  };
+
+  const getConvRole = (conv) => {
+    if (!conv || conv.isGroup) return "";
+    const otherId = conv.participants?.find(p => p !== user?.userId);
+    return conv.participantInfo?.[otherId]?.role || "";
   };
 
   const getConvInitial = (conv) => getConvDisplayName(conv).charAt(0).toUpperCase();
@@ -398,6 +445,7 @@ const ChatPage = () => {
             filteredConvs.map((conv) => {
               const isActive = activeConversationId === conv._id;
               const name = getConvDisplayName(conv);
+              const role = getConvRole(conv);
               const lastMsg = conv.lastMessage?.content || "No messages yet";
               const lastTime = conv.lastMessage?.timestamp ? timeAgo(conv.lastMessage.timestamp) : "";
               const unreadCount = conv.unreadCount || 0;
@@ -425,8 +473,16 @@ const ChatPage = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-1">
-                      <p className={cn("text-sm font-black truncate", isActive ? "text-teal-700" : "text-slate-800")}>
-                        {name}
+                      <p className={cn("text-sm font-black truncate flex items-center gap-1.5", isActive ? "text-teal-700" : "text-slate-800")}>
+                        <span className="truncate">{name}</span>
+                        {role && (
+                          <span className={cn(
+                            "text-[8px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full flex-shrink-0",
+                            ROLE_COLORS[role] || ROLE_COLORS.worker
+                          )}>
+                            {role}
+                          </span>
+                        )}
                       </p>
                       <span className="text-[9px] font-bold text-slate-400 flex-shrink-0">{lastTime}</span>
                     </div>
