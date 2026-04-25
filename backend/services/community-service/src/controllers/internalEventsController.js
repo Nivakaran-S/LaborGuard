@@ -17,13 +17,22 @@ const SERVICE_NAME = process.env.SERVICE_NAME || 'community-service';
 
 const handleAuthEvents = async (event) => {
     if (event.type !== 'user_registered') return;
-    const { userId, name, role } = event.payload;
+    const { userId, name, email, role } = event.payload;
     // auth-service emits 'ngo'; older clients may send 'ngo_representative'.
     const normalizedRole = role === 'ngo_representative' ? 'ngo' : role;
+    const cleanEmail = typeof email === 'string' ? email.toLowerCase().trim() : '';
 
     const existing = await UserProfile.findOne({ userId });
-    if (existing) return;
-    const profile = new UserProfile({ userId, name, role: normalizedRole });
+    if (existing) {
+        // Backfill email on profiles that pre-date the email field if the
+        // event carries one — cheap to write, avoids a one-off migration.
+        if (cleanEmail && !existing.email) {
+            existing.email = cleanEmail;
+            await existing.save();
+        }
+        return;
+    }
+    const profile = new UserProfile({ userId, name, email: cleanEmail, role: normalizedRole });
     await profile.save();
     console.log(`[${SERVICE_NAME}] Created profile for user ${userId}`);
 };

@@ -81,6 +81,7 @@ const registerUser = async (userData) => {
   emitEvent('auth-events', 'user_registered', {
     userId : userDoc._id.toString(),
     name   : `${userDoc.firstName} ${userDoc.lastName}`.trim(),
+    email  : userDoc.email,
     role   : userDoc.role,
   }).catch(err => console.error('[auth-service] Kafka emit error:', err.message));
 

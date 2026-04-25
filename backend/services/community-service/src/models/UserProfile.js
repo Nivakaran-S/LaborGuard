@@ -10,6 +10,16 @@ const userProfileSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    // Denormalized from auth-service via user_registered event so the Explore
+    // search can disambiguate users who happen to share a name. Older profiles
+    // pre-date this field and will read as undefined — UI falls back to a
+    // userId suffix in that case.
+    email: {
+        type: String,
+        default: '',
+        lowercase: true,
+        trim: true,
+    },
     role: {
         type: String,
         enum: ['worker', 'lawyer', 'ngo', 'ngo_representative', 'employer', 'admin'],

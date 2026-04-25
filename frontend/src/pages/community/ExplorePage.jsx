@@ -101,35 +101,57 @@ const ExplorePage = () => {
             ) : keywordProfiles.length === 0 ? (
               <div className="px-4 py-6 text-xs text-slate-400 font-bold text-center">No users found</div>
             ) : (
-              keywordProfiles.map((u) => {
-                const badge = ROLE_BADGE[u.role];
-                return (
-                  <button
-                    key={u.userId}
-                    onClick={() => navigate(`/community/profile/${u.userId}`)}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 text-left border-t border-slate-50"
-                  >
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={u.avatarUrl} />
-                      <AvatarFallback className="bg-gradient-to-br from-teal-400 to-emerald-500 text-white font-bold text-sm">
-                        {u.name?.charAt(0)?.toUpperCase() || "?"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-bold text-slate-900 truncate">{u.name}</p>
-                        {u.isVerified && <ShieldCheck className="h-3.5 w-3.5 text-blue-500" />}
-                        {badge && (
-                          <Badge className={`${badge.className} border-none text-[9px] font-black uppercase tracking-wider px-1.5 py-0`}>
-                            {badge.label}
-                          </Badge>
-                        )}
+              (() => {
+                // Defensive: dedupe by userId (in case the backend ever returns
+                // the same profile twice) and also count name collisions so we
+                // can show a userId tail to disambiguate same-named accounts
+                // that don't yet have a denormalised email.
+                const byId = new Map();
+                keywordProfiles.forEach((p) => { if (!byId.has(p.userId)) byId.set(p.userId, p); });
+                const unique = [...byId.values()];
+                const nameCount = unique.reduce((m, p) => {
+                  const k = (p.name || "").toLowerCase();
+                  m[k] = (m[k] || 0) + 1;
+                  return m;
+                }, {});
+                return unique.map((u) => {
+                  const badge = ROLE_BADGE[u.role];
+                  const ambiguous = nameCount[(u.name || "").toLowerCase()] > 1;
+                  // Subtitle: prefer email, fall back to bio, fall back to a
+                  // userId tail when names collide so you can tell two
+                  // "Nivakaran"s apart at a glance.
+                  const subtitle =
+                    u.email ||
+                    u.bio ||
+                    (ambiguous && u.userId ? `id ending in ${u.userId.slice(-6)}` : "");
+                  return (
+                    <button
+                      key={u.userId}
+                      onClick={() => navigate(`/community/profile/${u.userId}`)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 text-left border-t border-slate-50"
+                    >
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={u.avatarUrl} />
+                        <AvatarFallback className="bg-gradient-to-br from-teal-400 to-emerald-500 text-white font-bold text-sm">
+                          {u.name?.charAt(0)?.toUpperCase() || "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-bold text-slate-900 truncate">{u.name}</p>
+                          {u.isVerified && <ShieldCheck className="h-3.5 w-3.5 text-blue-500" />}
+                          {badge && (
+                            <Badge className={`${badge.className} border-none text-[9px] font-black uppercase tracking-wider px-1.5 py-0`}>
+                              {badge.label}
+                            </Badge>
+                          )}
+                        </div>
+                        {subtitle && <p className="text-xs text-slate-500 truncate">{subtitle}</p>}
                       </div>
-                      {u.bio && <p className="text-xs text-slate-500 truncate">{u.bio}</p>}
-                    </div>
-                  </button>
-                );
-              })
+                    </button>
+                  );
+                });
+              })()
             )}
           </div>
         )}

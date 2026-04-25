@@ -357,17 +357,31 @@ exports.searchProfiles = async (req, res) => {
 
         // Escape regex special chars to avoid ReDoS / malformed regex
         const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const filter = { name: new RegExp(escaped, 'i') };
+        const regex = new RegExp(escaped, 'i');
+        // Match name or email (denormalized from auth-service) so users can
+        // disambiguate same-named accounts by typing part of the email too.
+        const filter = { $or: [{ name: regex }, { email: regex }] };
         if (role) filter.role = role;
 
         const profiles = await UserProfile.find(
             filter,
-            { userId: 1, name: 1, avatarUrl: 1, role: 1, isVerified: 1, bio: 1 }
+            { userId: 1, name: 1, email: 1, avatarUrl: 1, role: 1, isVerified: 1, bio: 1 }
         )
             .limit(20)
             .lean();
 
-        res.json(profiles);
+        // Defensive de-dupe by userId. Mongoose's `unique: true` on userId
+        // should make this a no-op, but if the index ever gets out of sync
+        // (e.g. duplicates created before the field was uniqued) we don't want
+        // the same person to render multiple times in the dropdown.
+        const seen = new Set();
+        const deduped = profiles.filter((p) => {
+            if (seen.has(p.userId)) return false;
+            seen.add(p.userId);
+            return true;
+        });
+
+        res.json(deduped);
     } catch (error) {
         res.status(500).json({ message: 'Error searching profiles', error: error.message });
     }
