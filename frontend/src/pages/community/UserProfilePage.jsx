@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ChevronLeft, Grid3X3, Heart, Settings, UserPlus, UserCheck,
-  ShieldCheck, MessageCircle, Lock, Clock,
+  ShieldCheck, MessageCircle, Lock, Clock, List, Image as ImageIcon, Camera,
+  Layers
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/common/Avatar";
 import { Badge } from "@/components/common/Badge";
@@ -36,6 +37,8 @@ const UserProfilePage = () => {
   const { data: profile, isLoading: profileLoading } = useGetProfile(userId);
   const { data: stats } = useGetProfileStats(userId);
   const [activeTab, setActiveTab] = useState("posts");
+  // IG-style: grid view by default, list view as a fallback for full text/poll posts
+  const [viewMode, setViewMode] = useState("grid");
   const { data: authorPosts = [], isLoading: postsLoading, error: postsError } = useGetPostsByAuthor(userId);
 
   const [selectedPost, setSelectedPost] = useState(null);
@@ -210,27 +213,36 @@ const UserProfilePage = () => {
           </div>
         </div>
 
-        <div className="bg-white border-b border-slate-100 flex">
-          {[{ id: "posts", icon: Grid3X3, label: "Posts" }].map(({ id, icon: Icon, label }) => (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-3 text-xs font-black uppercase tracking-wide border-b-2 transition-colors",
-                activeTab === id
-                  ? "border-teal-500 text-teal-600"
-                  : "border-transparent text-slate-400 hover:text-slate-600"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          ))}
+        <div className="bg-white border-b border-slate-100 flex justify-center gap-8">
+          <button
+            onClick={() => { setActiveTab("posts"); setViewMode("grid"); }}
+            className={cn(
+              "flex items-center justify-center gap-2 py-3 text-xs font-black uppercase tracking-wide border-t-2 transition-colors",
+              activeTab === "posts" && viewMode === "grid"
+                ? "border-slate-900 text-slate-900"
+                : "border-transparent text-slate-400 hover:text-slate-600"
+            )}
+          >
+            <Grid3X3 className="h-4 w-4" />
+            Posts
+          </button>
+          <button
+            onClick={() => { setActiveTab("posts"); setViewMode("list"); }}
+            className={cn(
+              "flex items-center justify-center gap-2 py-3 text-xs font-black uppercase tracking-wide border-t-2 transition-colors",
+              activeTab === "posts" && viewMode === "list"
+                ? "border-slate-900 text-slate-900"
+                : "border-transparent text-slate-400 hover:text-slate-600"
+            )}
+          >
+            <List className="h-4 w-4" />
+            Feed View
+          </button>
         </div>
 
-        <div className="p-4 space-y-4">
+        <div className={cn(viewMode === "grid" ? "p-1 sm:p-1.5" : "p-4 space-y-4")}>
           {isPrivateBlocked ? (
-            <div className="bg-white rounded-2xl border border-dashed border-slate-200 py-16 text-center">
+            <div className="bg-white rounded-2xl border border-dashed border-slate-200 py-16 text-center mx-3 my-4">
               <Lock className="h-12 w-12 text-slate-300 mx-auto mb-3" />
               <p className="font-bold text-slate-600">This account is private</p>
               <p className="text-xs text-slate-400 mt-1">Follow to see their posts</p>
@@ -238,13 +250,61 @@ const UserProfilePage = () => {
           ) : postsLoading ? (
             <div className="flex justify-center py-10"><Spinner /></div>
           ) : postsError ? (
-            <div className="bg-white rounded-2xl border border-dashed border-red-200 py-10 text-center">
+            <div className="bg-white rounded-2xl border border-dashed border-red-200 py-10 text-center mx-3 my-4">
               <p className="text-sm font-bold text-red-400">Unable to load posts</p>
             </div>
           ) : authorPosts.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-dashed border-slate-200 py-16 text-center">
-              <Grid3X3 className="h-12 w-12 text-slate-200 mx-auto mb-3" />
-              <p className="font-bold text-slate-500">No posts yet</p>
+            <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl py-16 text-center mx-3 my-4">
+              <div className="h-16 w-16 mx-auto mb-3 rounded-full border-2 border-slate-300 flex items-center justify-center">
+                <Camera className="h-8 w-8 text-slate-300" strokeWidth={1.5} />
+              </div>
+              <p className="font-black text-2xl text-slate-700 mb-1">No Posts Yet</p>
+              <p className="text-xs text-slate-400">When {isMe ? "you share" : "they share"}, posts appear here.</p>
+            </div>
+          ) : viewMode === "grid" ? (
+            <div className="grid grid-cols-3 gap-1 sm:gap-1.5">
+              {authorPosts.map((post) => {
+                const firstImage = Array.isArray(post.mediaUrls) && post.mediaUrls.length > 0 ? post.mediaUrls[0] : null;
+                const isMulti = Array.isArray(post.mediaUrls) && post.mediaUrls.length > 1;
+                return (
+                  <button
+                    key={post._id}
+                    type="button"
+                    onClick={() => setSelectedPost(post)}
+                    className="relative aspect-square bg-slate-100 overflow-hidden group"
+                  >
+                    {firstImage ? (
+                      <img
+                        src={firstImage}
+                        alt=""
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 p-3 flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+                        <p className="text-[10px] sm:text-xs font-medium text-slate-600 line-clamp-6 leading-tight text-center">
+                          {post.content || "—"}
+                        </p>
+                      </div>
+                    )}
+                    {isMulti && (
+                      <div className="absolute top-1.5 right-1.5">
+                        <Layers className="h-4 w-4 text-white drop-shadow-md" />
+                      </div>
+                    )}
+                    {/* Hover overlay (desktop) — IG-style likes/comments count */}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-5 text-white">
+                      <span className="flex items-center gap-1.5 font-bold">
+                        <Heart className="h-5 w-5 fill-white" />
+                        {post.likes?.length || 0}
+                      </span>
+                      <span className="flex items-center gap-1.5 font-bold">
+                        <MessageCircle className="h-5 w-5 fill-white" />
+                        {post.commentCount || 0}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             authorPosts.map((post) => (

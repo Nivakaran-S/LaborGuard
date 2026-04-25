@@ -18,20 +18,36 @@ const createConversation = async (req, res) => {
             participants.push(requesterId);
         }
 
+        // 1-1: collapse the find-then-create into a single atomic upsert so two
+        // simultaneous calls from A and B can't each "miss" and create
+        // duplicate conversations. Sort participants for a stable equality match.
         if (!isGroup) {
-            const existingConversation = await Conversation.findOne({
-                isGroup: false,
-                participants: { $all: participants, $size: participants.length }
-            });
-            if (existingConversation) {
-                return res.status(200).json(existingConversation);
-            }
+            const sortedParticipants = [...participants].sort();
+            const conversation = await Conversation.findOneAndUpdate(
+                {
+                    isGroup: false,
+                    participants: { $all: sortedParticipants, $size: sortedParticipants.length },
+                },
+                {
+                    $setOnInsert: {
+                        participants: sortedParticipants,
+                        participantRoles,
+                        isGroup: false,
+                        groupName: '',
+                    },
+                },
+                { new: true, upsert: true, setDefaultsOnInsert: true }
+            );
+            // Distinguish between "found existing" and "just created" by inspecting
+            // createdAt — within a few ms of now means we just inserted.
+            const justCreated = Date.now() - new Date(conversation.createdAt).getTime() < 1000;
+            return res.status(justCreated ? 201 : 200).json(conversation);
         }
 
         const newConversation = new Conversation({
             participants,
             participantRoles,
-            isGroup: isGroup || false,
+            isGroup: true,
             groupName: groupName || ''
         });
 
@@ -168,6 +184,17 @@ const markAsRead = async (req, res) => {
         const userId = req.user.userId;                        // [AUTH-FIX] from JWT — was req.body.userId (spoofable)
         const { conversationId } = req.params;
 
+        // Only participants can mark a conversation's messages as read on their
+        // behalf. Without this, a non-participant who guessed a conversationId
+        // could append themselves to every message's readBy list.
+        const conversation = await Conversation.findById(conversationId);
+        if (!conversation) {
+            return res.status(404).json({ error: 'Conversation not found' });
+        }
+        if (!conversation.participants.includes(userId)) {
+            return res.status(403).json({ error: 'You are not a participant in this conversation' });
+        }
+
         const result = await Message.updateMany(
             { conversationId, readBy: { $ne: userId } },
             { $push: { readBy: userId } }
@@ -194,7 +221,28 @@ const deleteMessage = async (req, res) => {
             return res.status(403).json({ error: 'You can only delete your own messages' });
         }
 
+        const { conversationId } = message;
         await Message.findByIdAndDelete(messageId);
+
+        // If this was the conversation's lastMessage, recompute it from whatever
+        // remains so the conversation list stops showing the deleted text.
+        const conversation = await Conversation.findById(conversationId);
+        if (conversation?.lastMessage && String(conversation.lastMessage.timestamp?.getTime()) === String(message.createdAt.getTime())) {
+            const newLast = await Message.findOne({ conversationId }).sort({ createdAt: -1 });
+            if (newLast) {
+                const previewText = newLast.content
+                    ? newLast.content.substring(0, 50) + (newLast.content.length > 50 ? '...' : '')
+                    : 'Sent an attachment';
+                conversation.lastMessage = {
+                    senderId: newLast.senderId,
+                    content: previewText,
+                    timestamp: newLast.createdAt,
+                };
+            } else {
+                conversation.lastMessage = undefined;
+            }
+            await conversation.save();
+        }
 
         res.status(200).json({ message: 'Message deleted successfully' });
     } catch (error) {
