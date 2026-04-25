@@ -266,6 +266,9 @@ services:
   # Bound to JWT_ACCESS_SECRET so its HMAC matches the token messaging-service
   # signs (frontend useRealtime reuses the access token verbatim). Both must
   # share the same secret or real-time silently fails.
+  #
+  # Centrifugo v5 rejects --token_hmac_secret_key/--api_key as CLI flags; these
+  # have to be passed as env vars (CENTRIFUGO_*) which the binary auto-discovers.
   - type: web
     name: laborguard-centrifugo
     runtime: image
@@ -275,13 +278,14 @@ services:
     plan: free
     healthCheckPath: /health
     autoDeploy: true
-    dockerCommand: >-
-      centrifugo --port=10000 --health
-      --token_hmac_secret_key=$JWT_ACCESS_SECRET
-      --api_key=$CENTRIFUGO_API_KEY
-      --allowed_origins=*
+    dockerCommand: centrifugo --port=10000 --health
     envVars:
-      - key: JWT_ACCESS_SECRET
+      # Centrifugo's HMAC secret for verifying connection JWTs. MUST equal
+      # JWT_ACCESS_SECRET on every Node service (paste the same value).
+      - key: CENTRIFUGO_TOKEN_HMAC_SECRET_KEY
         sync: false
+      # Server-API auth key. MUST equal CENTRIFUGO_API_KEY on messaging-service.
       - key: CENTRIFUGO_API_KEY
         sync: false
+      - key: CENTRIFUGO_ALLOWED_ORIGINS
+        value: "*"
