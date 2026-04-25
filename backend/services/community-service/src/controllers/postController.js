@@ -85,19 +85,16 @@ exports.getFeed = async (req, res) => {
                 .limit(limit)
                 .lean();                                             // [PERF-4]
         } else {
-            // [FALLBACK] New user: fall back to global trending
-            posts = await Post.aggregate([
-                {
-                    $addFields: {
-                        engagementScore: {
-                            $add: [{ $size: '$likes' }, '$shareCount', { $multiply: ['$commentCount', 2] }]
-                        }
-                    }
-                },
-                { $sort:  { engagementScore: -1, createdAt: -1 } },
-                { $skip:  (page - 1) * limit },
-                { $limit: limit }
-            ]);
+            // [FALLBACK] User follows nobody yet — show the latest posts
+            // chronologically + their own. This used to mirror getTrendingFeed
+            // exactly, which made "For You" and "Trending" render identical
+            // lists until the user followed someone. Chronological keeps the
+            // tabs visibly distinct: For You = newest, Trending = engagement-ranked.
+            posts = await Post.find({})
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .lean();
         }
 
         res.json(posts);
