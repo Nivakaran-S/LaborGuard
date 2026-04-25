@@ -125,6 +125,11 @@ const loginUser = async (email, password) => {
 
   const userResponse = user.toObject();
   delete userResponse.password;
+  // Frontend reads `user.userId` (matches the JWT claim shape). User docs only
+  // expose `_id`, so without this alias every consumer using user.userId got
+  // undefined — including the chat "Start Chat" flow which then sent a
+  // [undefined, otherId] participants array and 500'd Mongoose validation.
+  userResponse.userId = userResponse._id?.toString?.();
 
   return { accessToken, refreshToken, user: userResponse };
 };

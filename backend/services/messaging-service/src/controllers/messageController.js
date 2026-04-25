@@ -7,15 +7,25 @@ const { publishToChannel } = require('../utils/centrifugoClient');
 const createConversation = async (req, res) => {
     try {
         const requesterId = req.user.userId;                    // [AUTH] always from JWT
-        const { participants, participantRoles, isGroup, groupName } = req.body;
+        const { participantRoles, isGroup, groupName } = req.body;
+        let { participants } = req.body;
 
-        if (!participants || participants.length < 2) {
-            return res.status(400).json({ error: 'At least 2 participants required' });
-        }
+        // Drop nullish / empty / non-string entries so a stale frontend cache
+        // sending [undefined, otherId] doesn't reach Mongoose's String validator
+        // and 500 the request.
+        participants = Array.isArray(participants)
+            ? participants.filter((p) => typeof p === 'string' && p.length > 0)
+            : [];
 
-        // Ensure requester is included in participants
-        if (!participants.includes(requesterId)) {
+        // Ensure requester is included
+        if (requesterId && !participants.includes(requesterId)) {
             participants.push(requesterId);
+        }
+        // De-dupe in case the requester selected themselves from search
+        participants = [...new Set(participants)];
+
+        if (participants.length < 2) {
+            return res.status(400).json({ error: 'At least 2 distinct participants required' });
         }
 
         // 1-1: try to find an existing conversation for the same participants

@@ -11,9 +11,13 @@ const getProfile = async (req, res, next) => {
             });
         }
 
+        // Match the login response shape — frontend reads user.userId everywhere.
+        const data = user.toObject();
+        data.userId = data._id?.toString?.();
+
         res.status(200).json({
             success: true,
-            data: user
+            data
         });
     } catch (error) {
         next(error);
