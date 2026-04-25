@@ -70,6 +70,20 @@ const signToken = ({ userId, role, email = 'user@test.com' }) =>
 
 const auth = (token) => ({ Authorization: `Bearer ${token}` });
 
+// autoCreateAppointment is fire-and-forget (.catch(...)) — the controller
+// doesn't await it, so a single setImmediate tick is not enough. Poll for the
+// expected number of appointments to appear (or stay empty) over a short
+// window before asserting.
+const waitForAppointments = async (expectedCount, timeoutMs = 3000) => {
+    const Appointment = require('../../src/models/Appointment');
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        const count = await Appointment.countDocuments({});
+        if (count === expectedCount) return;
+        await new Promise((r) => setTimeout(r, 50));
+    }
+};
+
 const newId = () => new mongoose.Types.ObjectId();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -286,9 +300,10 @@ describe('Auto-appointment lifecycle', () => {
         expect(res.status).toBe(200);
         expect(res.body.data.status).toBe('under_review');
 
-        // autoCreateAppointment runs in the background via .catch(); give the
-        // event loop a tick before asserting
-        await new Promise((r) => setImmediate(r));
+        // autoCreateAppointment runs in the background via .catch(); poll until
+        // it lands or we time out. A single setImmediate isn't enough because
+        // the auto-create chain awaits multiple DB ops.
+        await waitForAppointments(1);
 
         const apts = await Appointment.find({});
         expect(apts).toHaveLength(1);
@@ -325,7 +340,8 @@ describe('Auto-appointment lifecycle', () => {
             .send({ status: 'under_review' })
             .expect(200);
 
-        await new Promise((r) => setImmediate(r));
+        // Wait the full window — count must stay 0
+        await waitForAppointments(0);
         const apts = await Appointment.find({});
         expect(apts).toHaveLength(0);
     });
@@ -348,7 +364,7 @@ describe('Auto-appointment lifecycle', () => {
             .send({ status: 'under_review' })
             .expect(200);
 
-        await new Promise((r) => setImmediate(r));
+        await waitForAppointments(0);
         const apts = await Appointment.find({});
         expect(apts).toHaveLength(0);
     });
@@ -360,7 +376,7 @@ describe('Auto-appointment lifecycle', () => {
             .set(auth(adminToken))
             .send({ status: 'under_review' })
             .expect(200);
-        await new Promise((r) => setImmediate(r));
+        await waitForAppointments(1);
 
         const apt = await Appointment.findOne({});
         const res = await request(app)
@@ -387,7 +403,7 @@ describe('Auto-appointment lifecycle', () => {
             .set(auth(adminToken))
             .send({ status: 'under_review' })
             .expect(200);
-        await new Promise((r) => setImmediate(r));
+        await waitForAppointments(1);
 
         const apt = await Appointment.findOne({});
         const otherLawyer = signToken({ userId: newId(), role: 'lawyer' });
@@ -411,7 +427,7 @@ describe('Auto-appointment lifecycle', () => {
             .send({ status: 'under_review' });
         expect(res.status).toBe(200);
 
-        await new Promise((r) => setImmediate(r));
+        await waitForAppointments(0);
         const apts = await Appointment.find({});
         expect(apts).toHaveLength(0);
     });

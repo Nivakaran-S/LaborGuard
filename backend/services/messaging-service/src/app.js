@@ -29,9 +29,14 @@ if (process.env.NODE_ENV !== 'test') {
     }
 }
 
-app.use('/api', messageRoutes);
-app.use('/api/messages', messageRoutes);
+// IMPORTANT: mount internalRoutes BEFORE messageRoutes-on-/api. messageRoutes
+// applies JWT auth via router.use(protect) at the top, so anything under /api
+// that doesn't carry a Bearer token gets a 401 — including the cross-service
+// /api/internal/events/* webhook from sibling services. Putting the internal
+// mount first lets the secret-header guard run before JWT does.
 app.use('/api/internal', internalRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api', messageRoutes);
 
 app.get('/health', (req, res) => {
     res.json({
