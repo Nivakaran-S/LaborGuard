@@ -71,7 +71,18 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Health Check
+// Health Check (Render hits /health every ~10s; must be cheap and synchronous —
+// don't touch DB or external services here, otherwise transient failures fail
+// the deploy.)
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        service: process.env.SERVICE_NAME || 'auth-service',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Root banner
 app.get('/', (req, res) => {
     res.status(200).json({
         success: true,
