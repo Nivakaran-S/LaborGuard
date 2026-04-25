@@ -35,10 +35,17 @@ export const useRealtime = () => {
   }, [addMessage, queryClient]);
 
   const handleNotification = useCallback((payload) => {
-    if (payload.userId === user?.userId) {
-      incrementUnread();
-      queryClient.invalidateQueries(['notifications-unread', user?.userId]);
-    }
+    // notification-service sends { type: 'new_notification', notification: {...} }.
+    // Older publishes (if any) sent the notification fields at the top level.
+    const notification = payload?.notification || payload;
+    if (!notification || !notification.userId) return;
+    if (notification.userId !== user?.userId) return;
+
+    incrementUnread();
+    // Refresh the unread badge + the inbox without waiting for the 30s poll.
+    // (queryKey shape mirrors useNotifications.js — invalidate the prefix.)
+    queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
+    queryClient.invalidateQueries({ queryKey: ['notifications'] });
   }, [user?.userId, incrementUnread, queryClient]);
 
   // Track whether we've ever connected this session so we can distinguish

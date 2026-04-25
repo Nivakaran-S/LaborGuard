@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { Bell, CheckCheck, Trash2, MessageSquare, FileText, Users, ChevronLeft, Filter, Settings } from "lucide-react";
+import { Bell, CheckCheck, Trash2, MessageSquare, FileText, Users, ChevronLeft, Filter, Settings, ShieldAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Spinner } from "@/components/common/Spinner";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
-const TYPE_CONFIG = {
+// Categorise by `category` (UX bucket) — backend stores it on every new
+// notification. Older notifications without a `category` fall back to a
+// best-guess from `type` so they still render the right icon.
+const CATEGORY_CONFIG = {
   message: {
     icon: MessageSquare,
     color: "bg-blue-50 text-blue-600",
@@ -22,6 +25,11 @@ const TYPE_CONFIG = {
     color: "bg-teal-50 text-teal-600",
     label: "Community",
   },
+  moderation: {
+    icon: ShieldAlert,
+    color: "bg-red-50 text-red-600",
+    label: "Alerts",
+  },
   system: {
     icon: Bell,
     color: "bg-slate-100 text-slate-500",
@@ -29,7 +37,14 @@ const TYPE_CONFIG = {
   },
 };
 
-const TYPE_FILTERS = ["all", "message", "complaint", "community", "system"];
+const CATEGORY_FILTERS = ["all", "message", "complaint", "community", "moderation", "system"];
+
+// Pre-`category` notifications: derive a category from the legacy `type`.
+const categoryOf = (n) =>
+  n?.category ||
+  (n?.type === "message" ? "message"
+    : n?.type === "alert" ? "moderation"
+      : "system");
 
 const NotificationsPage = () => {
   const navigate = useNavigate();
@@ -39,7 +54,7 @@ const NotificationsPage = () => {
 
   const filtered = activeFilter === "all"
     ? notifications
-    : notifications.filter(n => n.type === activeFilter);
+    : notifications.filter(n => categoryOf(n) === activeFilter);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -85,7 +100,7 @@ const NotificationsPage = () => {
         {/* Filter tabs */}
         <div className="max-w-2xl mx-auto px-4 pb-3">
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-            {TYPE_FILTERS.map((f) => (
+            {CATEGORY_FILTERS.map((f) => (
               <button
                 key={f}
                 onClick={() => setActiveFilter(f)}
@@ -96,7 +111,7 @@ const NotificationsPage = () => {
                     : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                 )}
               >
-                {f === "all" ? "All" : TYPE_CONFIG[f]?.label || f}
+                {f === "all" ? "All" : CATEGORY_CONFIG[f]?.label || f}
               </button>
             ))}
           </div>
@@ -122,7 +137,7 @@ const NotificationsPage = () => {
           </div>
         ) : (
           filtered.map((n) => {
-            const config = TYPE_CONFIG[n.type] || TYPE_CONFIG.system;
+            const config = CATEGORY_CONFIG[categoryOf(n)] || CATEGORY_CONFIG.system;
             const Icon = config.icon;
             const timeAgo = n.createdAt
               ? formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })

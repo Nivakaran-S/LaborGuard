@@ -10,6 +10,15 @@ const notificationSchema = new mongoose.Schema({
         enum: ['message', 'system', 'alert'],
         default: 'system'
     },
+    // UX-level grouping for the notifications page filters. type is the
+    // storage bucket; category is what the user filters by. Backfills to
+    // 'system' for older docs that pre-date the field.
+    category: {
+        type: String,
+        enum: ['message', 'community', 'complaint', 'moderation', 'system'],
+        default: 'system',
+        index: true,
+    },
     title: {
         type: String,
         required: true
