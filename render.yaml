@@ -99,6 +99,11 @@ services:
         value: "0.7"
       - key: NSFW_THRESHOLD
         value: "0.5"
+      # NSFWJS + TensorFlow loads a ~200MB model and OOMs Render free-tier
+      # (512MB cap). Disable by default; flip to "false" on a paid plan to
+      # re-enable image moderation.
+      - key: DISABLE_NSFW_CHECK
+        value: "true"
       # Validates x-internal-secret on /api/internal/events/* and emits its own.
       - key: INTERNAL_SERVICE_SECRET
         sync: false
