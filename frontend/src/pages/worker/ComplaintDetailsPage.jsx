@@ -258,6 +258,7 @@ const ComplaintDetailsPage = () => {
                                     >
                                         <option value="pending">Mark as Pending</option>
                                         <option value="under_review">Start Investigation</option>
+                                        <option value="in_progress">Active Case</option>
                                         <option value="resolved">Close as Resolved</option>
                                         <option value="rejected">Mark as Rejected</option>
                                     </select>
