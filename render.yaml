@@ -260,3 +260,28 @@ services:
         sync: false
       - key: FRONTEND_URL
         value: https://labor-guard.vercel.app
+
+  # ── Centrifugo (real-time messaging gateway) ───────────────────────────────
+  # Image-based service — no Node build, just pulls the upstream Docker image.
+  # Bound to JWT_ACCESS_SECRET so its HMAC matches the token messaging-service
+  # signs (frontend useRealtime reuses the access token verbatim). Both must
+  # share the same secret or real-time silently fails.
+  - type: web
+    name: laborguard-centrifugo
+    runtime: image
+    image:
+      url: docker.io/centrifugo/centrifugo:v5
+    region: singapore
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    dockerCommand: >-
+      centrifugo --port=10000 --health
+      --token_hmac_secret_key=$JWT_ACCESS_SECRET
+      --api_key=$CENTRIFUGO_API_KEY
+      --allowed_origins=*
+    envVars:
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: CENTRIFUGO_API_KEY
+        sync: false
