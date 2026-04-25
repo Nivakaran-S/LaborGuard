@@ -20,17 +20,19 @@ export const useRealtime = () => {
   const { setCentrifugoClient, activeConversationId, addMessage } = useMessagingStore();
   const { incrementUnread } = useNotificationStore();
 
+  // payload shape from the backend: { type, conversationId, message }
   const handleNewMessage = useCallback((payload) => {
+    if (!payload || !payload.message) return;
     const { conversationId, message } = payload;
     addMessage(conversationId, message);
-    if (conversationId === activeConversationId) {
-      queryClient.setQueryData(['messages', conversationId], (oldData) => {
-        if (!oldData) return [message];
-        if (oldData.find(m => m._id === message._id)) return oldData;
-        return [...oldData, message];
-      });
-    }
-  }, [activeConversationId, addMessage, queryClient]);
+    queryClient.setQueryData(['messages', conversationId], (oldData) => {
+      if (!oldData) return [message];
+      if (oldData.find(m => m._id === message._id)) return oldData;
+      return [...oldData, message];
+    });
+    // The sidebar shows lastMessage + unread, both of which need a fresh fetch.
+    queryClient.invalidateQueries({ queryKey: ['conversations'] });
+  }, [addMessage, queryClient]);
 
   const handleNotification = useCallback((payload) => {
     if (payload.userId === user?.userId) {
@@ -120,28 +122,40 @@ export const useRealtime = () => {
       }
     });
 
-    // Subscribe to personal notification channel
-    const subNotification = centrifuge.newSubscription(
-      `notifications:${user._id || user.userId}`
-    );
-    subNotification.on('publication', (ctx) => {
-      handleNotification(ctx.data);
-    });
-    subNotification.on('error', (err) => {
-      console.warn('Notification subscription error:', err);
-    });
+    const userId = user.userId || user._id;
+
+    // Personal notification channel
+    const subNotification = centrifuge.newSubscription(`notifications:${userId}`);
+    subNotification.on('publication', (ctx) => handleNotification(ctx.data));
+    subNotification.on('error', (err) => console.warn('Notification subscription error:', err));
     subNotification.subscribe();
 
-    // Subscribe to active conversation channel if exists
+    // Personal chat-firehose: every conversation-related event for this user
+    // lands here regardless of which conversation is currently open. Without
+    // this, a recipient with the messages page closed (or open on a different
+    // thread) never saw incoming messages until they manually refreshed.
+    const subUser = centrifuge.newSubscription(`user:${userId}`);
+    subUser.on('publication', (ctx) => {
+      const data = ctx?.data || {};
+      if (data.type === 'new_message') {
+        handleNewMessage(data);
+      }
+    });
+    subUser.on('error', (err) => console.warn('User-channel subscription error:', err));
+    subUser.subscribe();
+
+    // Active conversation channel — fast path for the thread the user is
+    // staring at. Same payload shape as user:{userId}.
     let subChat = null;
     if (activeConversationId) {
       subChat = centrifuge.newSubscription(`chat:${activeConversationId}`);
       subChat.on('publication', (ctx) => {
-        handleNewMessage({ conversationId: activeConversationId, message: ctx.data });
+        const data = ctx?.data || {};
+        if (data.type === 'new_message') {
+          handleNewMessage(data);
+        }
       });
-      subChat.on('error', (err) => {
-        console.warn('Chat subscription error:', err);
-      });
+      subChat.on('error', (err) => console.warn('Chat subscription error:', err));
       subChat.subscribe();
     }
 
@@ -149,8 +163,8 @@ export const useRealtime = () => {
     setCentrifugoClient(centrifuge);
 
     return () => {
-      // FIX: Safe cleanup — unsubscribe before disconnect
       try { subNotification.unsubscribe(); } catch (_) {}
+      try { subUser.unsubscribe(); } catch (_) {}
       try { if (subChat) subChat.unsubscribe(); } catch (_) {}
       try { centrifuge.disconnect(); } catch (_) {}
     };

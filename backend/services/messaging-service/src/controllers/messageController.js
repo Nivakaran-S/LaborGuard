@@ -171,13 +171,31 @@ const sendMessage = async (req, res) => {
             groupName  : conversation.groupName
         });
 
+        // Two real-time channels:
+        //   chat:{conversationId} — listened to by users who currently have
+        //     this conversation open, so the active thread updates live.
+        //   user:{recipientId}    — listened to by every authenticated user
+        //     all the time, so even users who don't yet have the conversation
+        //     open get a list-level update + their inbox refreshes.
         try {
             await publishToChannel(`chat:${conversationId}`, {
-                type   : 'new_message',
-                message: newMessage
+                type: 'new_message',
+                conversationId: String(conversation._id),
+                message: newMessage,
             });
         } catch (centrifugoErr) {
-            console.error('Failed to publish to Centrifugo:', centrifugoErr.message);
+            console.error('Failed to publish chat: channel:', centrifugoErr.message);
+        }
+        for (const rid of recipientIds) {
+            try {
+                await publishToChannel(`user:${rid}`, {
+                    type: 'new_message',
+                    conversationId: String(conversation._id),
+                    message: newMessage,
+                });
+            } catch (centrifugoErr) {
+                console.error(`Failed to publish user:${rid} channel:`, centrifugoErr.message);
+            }
         }
 
         res.status(201).json(newMessage);

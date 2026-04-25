@@ -235,12 +235,16 @@ const ChatPage = () => {
   useRealtime();
 
   // ── Conversations list ──────────────────────────────────────────────────────
+  // refetchInterval is a Centrifugo-failure safety net — if real-time is down,
+  // the sidebar still picks up new messages within 15s.
   const { data: conversations = [], isLoading: convsLoading } = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
       const res = await messageApi.getConversations();
       return res.data || [];
-    }
+    },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   // ── Messages for active conversation ───────────────────────────────────────
@@ -251,6 +255,8 @@ const ChatPage = () => {
       return res.data || [];
     },
     enabled: !!activeConversationId,
+    refetchInterval: 8000,
+    refetchOnWindowFocus: true,
   });
 
   // ── Send message ───────────────────────────────────────────────────────────
