@@ -1,28 +1,39 @@
-const nodemailer = require('nodemailer');
+/**
+ * emailService.js — complaint-service
+ *
+ * All email goes through Resend (replaces Nodemailer/Gmail).
+ * Required env: RESEND_API_KEY, SYSTEM_DEFAULT_EMAIL (must be on a verified
+ * domain in your Resend dashboard).
+ */
 
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
+const { Resend } = require('resend');
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM = process.env.SYSTEM_DEFAULT_EMAIL || 'notifications@laborguard.org';
+
+let _resend = null;
+const getResend = () => {
+  if (_resend) return _resend;
+  if (!RESEND_API_KEY) {
+    console.warn('[complaint-service/email] RESEND_API_KEY not set — emails will silently fail');
+    return null;
+  }
+  _resend = new Resend(RESEND_API_KEY);
+  return _resend;
 };
 
 const sendEmail = async ({ to, subject, html }) => {
-  const transporter = createTransporter();
-
-  const mailOptions = {
-    from: `"LaborGuard" <${process.env.EMAIL_USER}>`,
-    to,
+  const resend = getResend();
+  if (!resend) return { skipped: true };
+  const { data, error } = await resend.emails.send({
+    from: `LaborGuard <${FROM}>`,
+    to: [to],
     subject,
-    html
-  };
-
-  const info = await transporter.sendMail(mailOptions);
-  console.log(`[emailService] Email sent to ${to} — Message ID: ${info.messageId}`);
-  return info;
+    html,
+  });
+  if (error) throw new Error(error.message || JSON.stringify(error));
+  console.log(`[emailService] Email sent to ${to} — Message ID: ${data?.id}`);
+  return data;
 };
 
 // Sent to a worker when they successfully file a new complaint

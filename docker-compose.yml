@@ -71,6 +71,9 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
       - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION}
+      # Email via Resend (single provider for the whole platform)
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - SYSTEM_DEFAULT_EMAIL=${SYSTEM_DEFAULT_EMAIL}
       - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
       # auth-service emits cross-service events over HTTP to these consumers
       - NOTIFICATION_SERVICE_URL=http://notification-service:5004
@@ -145,9 +148,9 @@ services:
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
       - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
       - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
-      - EMAIL_SERVICE=${EMAIL_SERVICE}
-      - EMAIL_USER=${EMAIL_USER}
-      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      # Email via Resend (single provider for the whole platform)
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - SYSTEM_DEFAULT_EMAIL=${SYSTEM_DEFAULT_EMAIL}
       - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
       - NOTIFICATION_SERVICE_URL=http://notification-service:5004
       - COMMUNITY_SERVICE_URL=http://community-service:5002
@@ -182,9 +185,6 @@ services:
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - SYSTEM_DEFAULT_EMAIL=${SYSTEM_DEFAULT_EMAIL}
-      - EMAIL_SERVICE=${EMAIL_SERVICE}
-      - EMAIL_USER=${EMAIL_USER}
-      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
       # Cross-service: looks up user emails on auth-service via HTTP+secret.
       - AUTH_SERVICE_URL=http://auth-service:5001
       - INTERNAL_SERVICE_SECRET=${INTERNAL_SERVICE_SECRET}
@@ -258,6 +258,11 @@ services:
       - MONGODB_URI=${MONGODB_ATLAS_BASE}
       - MONGODB_DB_NAME=laborguard-jobs
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      # Email via Resend (application status updates with optional contract PDF)
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - SYSTEM_DEFAULT_EMAIL=${SYSTEM_DEFAULT_EMAIL}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - FRONTEND_URL=${FRONTEND_URL}
       # job-service has no cross-service events to emit, so no INTERNAL_* envs.
     networks:
       - laborguard-network

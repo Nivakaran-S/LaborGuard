@@ -1,24 +1,35 @@
-const nodemailer = require('nodemailer');
+/**
+ * emailService.js — job-service
+ *
+ * All email goes through Resend (replaces Nodemailer/Gmail).
+ * Required env: RESEND_API_KEY, SYSTEM_DEFAULT_EMAIL (must be on a verified
+ * domain in your Resend dashboard).
+ *
+ * Public function `sendApplicationStatusEmail(...)` signature unchanged so
+ * jobController callers don't need updating. Supports PDF attachments
+ * (employment contracts) — Resend accepts attachments as base64 strings.
+ */
 
-const createTransporter = () => {
-    return nodemailer.createTransport({
-        service: process.env.EMAIL_SERVICE, // e.g., 'gmail'
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASSWORD
-        },
-        tls: {
-            rejectUnauthorized: false
-        }
-    });
+const { Resend } = require('resend');
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM = process.env.SYSTEM_DEFAULT_EMAIL || 'notifications@laborguard.org';
+
+let _resend = null;
+const getResend = () => {
+    if (_resend) return _resend;
+    if (!RESEND_API_KEY) {
+        return null;
+    }
+    _resend = new Resend(RESEND_API_KEY);
+    return _resend;
 };
 
 const sendApplicationStatusEmail = async (toEmail, workerName, jobTitle, status, extraData = {}) => {
     try {
         const isAccepted = status === 'accepted';
-        const hasCredentials = process.env.EMAIL_USER && process.env.EMAIL_PASSWORD;
 
-        const subject = isAccepted 
+        const subject = isAccepted
             ? `Congratulations! Your application for "${jobTitle}" was Accepted`
             : `Status Update: Your application for "${jobTitle}"`;
 
@@ -42,7 +53,7 @@ const sendApplicationStatusEmail = async (toEmail, workerName, jobTitle, status,
                 <h2 style="color: #64748b;">Application Status Updated</h2>
                 <p>Hello ${workerName},</p>
                 <p>We wanted to inform you that your application for the position of <strong>${jobTitle}</strong> was not selected at this time.</p>
-                
+
                 <div style="background-color: #fffbfa; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
                     <h3 style="margin-top: 0; color: #ef4444;">Feedback / Reason</h3>
                     <p><em>"${extraData.rejectionReason || 'Did not meet current role requirements.'}"</em></p>
@@ -54,37 +65,43 @@ const sendApplicationStatusEmail = async (toEmail, workerName, jobTitle, status,
             </div>
         `;
 
-        if (!hasCredentials) {
-            console.log('\n--- [EMAIL PREVIEW MODE] ---');
+        const resend = getResend();
+        if (!resend) {
+            // Preview mode for local dev — log instead of sending.
+            console.log('\n--- [EMAIL PREVIEW MODE — RESEND_API_KEY not set] ---');
             console.log(`TO: ${toEmail}`);
             console.log(`SUBJECT: ${subject}`);
             console.log(`STATUS: ${status.toUpperCase()}`);
             if (!isAccepted) console.log(`REASON: ${extraData.rejectionReason}`);
             console.log('--- CONTENT START ---');
-            console.log(html.replace(/<[^>]*>?/gm, '')); 
+            console.log(html.replace(/<[^>]*>?/gm, ''));
             console.log('--- [END PREVIEW] ---\n');
             return true;
         }
 
-        const transporter = createTransporter();
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: toEmail,
+        const payload = {
+            from: `LaborGuard <${FROM}>`,
+            to: [toEmail],
             subject,
             html,
-            attachments: []
         };
 
+        // Resend attachments: { filename, content (base64 string or Buffer) }
         if (isAccepted && extraData.contractPdfBuffer) {
-            mailOptions.attachments.push({
+            payload.attachments = [{
                 filename: `Employment_Contract_${workerName.replace(/\s+/g, '_')}.pdf`,
-                content: extraData.contractPdfBuffer,
-                contentType: 'application/pdf'
-            });
+                content: Buffer.isBuffer(extraData.contractPdfBuffer)
+                    ? extraData.contractPdfBuffer.toString('base64')
+                    : extraData.contractPdfBuffer,
+            }];
         }
 
-        await transporter.sendMail(mailOptions);
-        console.log(`Application ${status} email sent to ${toEmail}`);
+        const { data, error } = await resend.emails.send(payload);
+        if (error) {
+            console.error('Error sending application status email:', error.message || error);
+            return false;
+        }
+        console.log(`Application ${status} email sent to ${toEmail} — ID: ${data?.id}`);
         return true;
     } catch (error) {
         console.error('Error sending application status email:', error);
@@ -93,5 +110,5 @@ const sendApplicationStatusEmail = async (toEmail, workerName, jobTitle, status,
 };
 
 module.exports = {
-    sendApplicationStatusEmail
+    sendApplicationStatusEmail,
 };

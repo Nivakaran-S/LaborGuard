@@ -49,6 +49,11 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      # Email (Resend) — used for OTP verification, password reset, approval/rejection
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SYSTEM_DEFAULT_EMAIL
+        sync: false
       # Validates x-internal-secret on /api/auth/internal/* (called by notification-service).
       - key: INTERNAL_SERVICE_SECRET
         sync: false
@@ -133,9 +138,7 @@ services:
         sync: false
       - key: RESEND_API_KEY
         sync: false
-      - key: EMAIL_USER
-        sync: false
-      - key: EMAIL_PASSWORD
+      - key: SYSTEM_DEFAULT_EMAIL
         sync: false
       - key: FRONTEND_URL
         value: https://labor-guard.vercel.app
@@ -251,13 +254,9 @@ services:
         sync: false
       - key: RESEND_API_KEY
         sync: false
+      - key: SYSTEM_DEFAULT_EMAIL
+        sync: false
       - key: GROQ_API_KEY
-        sync: false
-      - key: EMAIL_SERVICE
-        sync: false
-      - key: EMAIL_USER
-        sync: false
-      - key: EMAIL_PASSWORD
         sync: false
       - key: FRONTEND_URL
         value: https://labor-guard.vercel.app
