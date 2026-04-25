@@ -10,7 +10,9 @@ export default defineConfig([
     files: ['**/*.{js,jsx}'],
     extends: [
       js.configs.recommended,
-      reactHooks.configs.flat.recommended,
+      // eslint-plugin-react-hooks v5 exposes `recommended-latest` for flat config;
+      // `configs.flat.recommended` only existed in pre-v5 and was undefined here.
+      reactHooks.configs['recommended-latest'],
       reactRefresh.configs.vite,
     ],
     languageOptions: {
