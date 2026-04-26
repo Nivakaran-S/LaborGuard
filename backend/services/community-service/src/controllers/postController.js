@@ -109,17 +109,47 @@ exports.getTrendingFeed = async (req, res) => {
         const page  = Math.max(1, parseInt(req.query.page)  || 1);
         const limit = Math.min(50, parseInt(req.query.limit) || 20);
 
+        // Trending only counts posts with at least ONE engagement signal
+        // (a like, a share, or a comment). Without this filter, when every
+        // post in the DB has zero engagement the aggregation tie-breaks on
+        // `createdAt: -1` and Trending becomes identical to For You.
+        // Requiring engagement keeps the two tabs meaningfully distinct.
+        //
+        // The score itself is also time-decayed: a 30-day-old viral post
+        // shouldn't outrank a freshly engaging one indefinitely.
+        const TRENDING_WINDOW_DAYS = 30;
+        const cutoff = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
         const posts = await Post.aggregate([
+            {
+                $match: {
+                    createdAt: { $gte: cutoff },
+                    $expr: {
+                        $gt: [
+                            { $add: [
+                                { $size: { $ifNull: ['$likes', []] } },
+                                { $ifNull: ['$shareCount', 0] },
+                                { $ifNull: ['$commentCount', 0] },
+                            ] },
+                            0,
+                        ],
+                    },
+                },
+            },
             {
                 $addFields: {
                     engagementScore: {
-                        $add: [{ $size: '$likes' }, '$shareCount', { $multiply: ['$commentCount', 2] }]
-                    }
-                }
+                        $add: [
+                            { $size: { $ifNull: ['$likes', []] } },
+                            { $ifNull: ['$shareCount', 0] },
+                            { $multiply: [{ $ifNull: ['$commentCount', 0] }, 2] },
+                        ],
+                    },
+                },
             },
             { $sort:  { engagementScore: -1, createdAt: -1 } },
             { $skip:  (page - 1) * limit },
-            { $limit: limit }
+            { $limit: limit },
         ]);
 
         res.json(posts);
