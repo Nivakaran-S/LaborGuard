@@ -93,6 +93,12 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
+      # Content moderation — set EITHER GROQ_API_KEY (preferred — Llama 3.3
+      # 70B, faster, more generous free tier) OR OPENAI_API_KEY (purpose-
+      # built /v1/moderations). Groq wins if both are configured. Force a
+      # specific provider with MODERATION_PROVIDER=groq|openai.
+      - key: GROQ_API_KEY
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: TOXICITY_THRESHOLD
