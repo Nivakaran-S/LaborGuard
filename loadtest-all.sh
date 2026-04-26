@@ -46,8 +46,9 @@ SERVICES=(
 
 # Optional positional filter — `./loadtest-all.sh auth job` runs only those.
 filter_includes() {
-  if [[ $# -eq 0 ]]; then return 0; fi
   local svc="$1"; shift
+  # After shifting the service name, no needles left → include everything.
+  if [[ $# -eq 0 ]]; then return 0; fi
   local needle
   for needle in "$@"; do
     if [[ "$svc" == *"$needle"* ]]; then return 0; fi
