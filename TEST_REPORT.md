@@ -10,10 +10,16 @@
 
 | Test type | Services covered | Tests | Status |
 |---|---|---|---|
-| **Unit** | auth-service, complaint-service | **42 passing** (8 + 34) | ✅ Green |
-| **Integration** | auth, complaint, community, messaging, notification, job | **99 passing** (10 + 22 + 18 + 13 + 15 + 21) | ✅ Green |
-| **Performance (Artillery)** | All 6 services | YAML scripts configured (Warm-up → Load → Stress phases) | ✅ Wired, ready to run |
-| **Total** | 6 services | **141 automated test cases** | ✅ Green |
+| **Unit** | auth-service, complaint-service | **42 passing** (8 + 34) | ✅ Run live, all green |
+| **Integration** | auth, complaint, community, messaging, notification, job | **99 passing** (10 + 22 + 18 + 13 + 15 + 21) | ✅ Run live, all green |
+| **Performance (Artillery)** | All 6 services | YAML scripts configured for all 6 services | ⚠️ **Not yet executed live** — see §4 |
+| **Total automated cases** | 6 services | **141 automated test cases** | ✅ 141 / 141 green |
+
+> **About performance numbers in this report:** the request-rate / p95 / p99
+> figures shown in §4.2 are **expected sample output** illustrating Artillery's
+> report shape — they were *not* measured from a live run in the session that
+> produced this document. To capture real numbers, run `./loadtest-all.sh`
+> (or `.\loadtest-all.ps1` on Windows without Git Bash) — see §4.4.
 
 **Bugs found and fixed during the test run:**
 
@@ -256,13 +262,18 @@ Artillery prints a phased report including:
 - **Response time** — min, max, **median, p95, p99**
 - **Errors** with sample request bodies for any non-2xx
 
-### 4.2 Sample expected output (auth-service)
+### 4.2 Sample (illustrative) Artillery output — NOT a real measurement
+
+> ⚠️ **The numbers below are SAMPLE OUTPUT — not measured during this report.**
+> They illustrate the shape of an Artillery report so the reader knows what to
+> expect. To produce real numbers, run the orchestration script in §4.4 (or any
+> per-service command in §4.1) on a machine that can reach Atlas.
 
 ```
 All VUs finished. Total time: 2 minutes, 8 seconds
 
 --------------------------------
-Summary report @ load test end
+Summary report @ load test end       [sample / expected — not measured]
 --------------------------------
 
 http.codes.200: ........................ 1850
@@ -284,21 +295,62 @@ scenarios.completed: ................... 2850
 scenarios.created: ..................... 2850
 ```
 
-> **Note for the panel:** the actual numbers depend on local hardware + Atlas latency. The above is a representative shape. Acceptance criteria: p95 < 500 ms, error rate < 1 % (excluding intentional 400s on duplicate emails).
+**Acceptance criteria** (apply to your real runs):
+- **p95 response time < 500 ms** under sustained load
+- **Error rate < 1 %** excluding intentional 4xx (duplicate emails, validation rejections)
 
-### 4.3 Run command (all services in sequence)
+### 4.3 Run command (single service, manual)
 
 ```bash
-# In one terminal — services up via docker-compose
-docker compose up -d auth-service complaint-service community-service \
-  messaging-service notification-service job-service
+# Terminal 1 — start the service (uses .env, connects to Atlas)
+cd backend/services/auth-service
+npm start            # wait for "Server running on port 5001"
 
-# In another — run each loadtest
-for s in auth-service complaint-service community-service messaging-service notification-service job-service; do
-  echo "=== $s ==="
-  (cd backend/services/$s && npm run loadtest) 2>&1 | tee "perf-$s.log"
-done
+# Terminal 2 — fire Artillery
+cd backend/services/auth-service
+npm run loadtest
 ```
+
+### 4.4 Run command — ALL services automated (recommended)
+
+There's a one-shot orchestration script at the repo root that starts each
+service, polls /health, runs Artillery, captures the report, then tears down
+before moving to the next:
+
+**Bash / Git Bash / Linux / macOS:**
+```bash
+./loadtest-all.sh                  # all six services, sequential
+./loadtest-all.sh auth complaint   # substring filter
+```
+
+**PowerShell (Windows without Git Bash):**
+```powershell
+.\loadtest-all.ps1                          # all six services
+.\loadtest-all.ps1 -Filter auth, complaint  # substring filter
+```
+
+**What it does, per service:**
+1. Starts via `npm start` (each service reads its `.env`).
+2. Polls `http://localhost:<port>/health` until 200 (60s timeout).
+3. Runs `npx artillery run tests/performance/load-test.yml` and captures
+   the full report to `perf-reports/<service>.log`.
+4. Stops the service before the next.
+
+**Why sequential, not parallel:** all six services share one Atlas cluster, so
+running them concurrently would skew p95/p99 because requests would queue at
+the database. Sequential gives clean per-service measurements.
+
+**Output:**
+```
+perf-reports/
+├── auth-service.log              full Artillery report
+├── auth-service.summary.txt      one-screen summary (response_time, codes, errors)
+├── complaint-service.log
+├── complaint-service.summary.txt
+└── ... (one pair per service)
+```
+
+End-to-end runtime: ~12-15 minutes for all six (each Artillery script is ~2 min).
 
 ---
 
@@ -378,20 +430,30 @@ npm run test:integration
 
 This is the most impressive demo: shows the eligibility matrix exhaustively, then runs the full lifecycle test end-to-end (admin registers lawyer → worker files complaint → admin transitions status → auto-appointment created → lawyer records outcome → worker shares). All in <30 seconds, all green.
 
-### Performance demo
+### Performance demo (single service, two terminals)
 
 ```bash
-# Terminal 1
+# Terminal 1 — start the service
 cd backend/services/auth-service
-npm run dev
+npm start                # wait for "Server running on port 5001"
 
-# Wait for "Server running on port 5001"
-# Terminal 2
+# Terminal 2 — fire Artillery
 cd backend/services/auth-service
 npm run loadtest
 ```
 
 Watch Artillery ramp through 5 → 20 → 50 req/s with the live request-rate counter.
+
+### Performance demo (all 6 services, one command)
+
+```bash
+./loadtest-all.sh                       # bash / git-bash / linux / macOS
+.\loadtest-all.ps1                      # powershell
+```
+
+The script runs each service in turn, captures `perf-reports/<service>.log` +
+a `.summary.txt`, and prints a final pass/fail table. ~12-15 minutes for all
+six. Bring the resulting `perf-reports/` folder to the viva.
 
 ### CI proof
 
