@@ -219,7 +219,14 @@ const CommunityFeedPage = () => {
         onClose={() => setStoryComposerOpen(false)}
       />
 
-      {/* ── Story Viewer (Instagram-style) ─────────────────────── */}
+      {/* ── Story Viewer ─────────────────────────────────────────
+          Responsive layout:
+          - Phones (any orientation):  full-bleed edge-to-edge card
+          - Tablet / desktop:          centered 9:16 card capped at 92vh
+          Media is a single absolute layer filling the card; the top bar
+          and bottom caption float on top via gradient overlays so the
+          image is always fully visible with no cropping.
+       */}
       {viewingStory && (() => {
         const isOwn = viewingStory.authorId === user?.userId;
         const initial = (viewingStory.authorName || user?.firstName || "?").charAt(0).toUpperCase();
@@ -232,82 +239,93 @@ const CommunityFeedPage = () => {
             className="fixed inset-0 bg-black z-50 flex items-center justify-center animate-in fade-in"
             onClick={() => setViewingStory(null)}
           >
-            {/* Story card — stops backdrop click; only X / outside dismiss */}
             <div
-              className="relative w-full max-w-[420px] h-full sm:h-[92vh] sm:rounded-3xl overflow-hidden bg-slate-950 flex flex-col"
               onClick={(e) => e.stopPropagation()}
+              className="
+                relative bg-slate-950 overflow-hidden shadow-2xl
+                w-full h-[100dvh]
+                sm:w-auto sm:h-auto sm:max-h-[92vh] sm:aspect-[9/16] sm:rounded-3xl
+              "
+              style={{
+                // Cap the width on tablet/desktop so a tall 92vh × 9:16 card
+                // (which would be ~518px wide on a 1080px viewport) doesn't
+                // dominate. Falls back to default sm:aspect sizing on smaller
+                // screens.
+                maxWidth: 'min(440px, 100vw)',
+              }}
             >
-              {/* Progress bar (single segment for now — per-author segments
-                  would land here when we add multi-story authors) */}
-              <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-3 pointer-events-none">
-                <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+              {/* Layer 1 — full-bleed media or text-only gradient backdrop.
+                  Uses object-cover for media (the natural story format is
+                  9:16; cropping at the edges is the IG-expected behavior).
+                  Text-only stories get a teal/emerald gradient. */}
+              {viewingStory.mediaUrl ? (
+                <img
+                  src={viewingStory.mediaUrl}
+                  alt="Story media"
+                  className="absolute inset-0 w-full h-full object-cover select-none"
+                  draggable={false}
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-teal-600 via-emerald-600 to-cyan-700" />
+              )}
+
+              {/* Layer 2 — top gradient + progress bar + header. Uses pb-14
+                  so the gradient fades cleanly without a hard line. */}
+              <div className="absolute top-0 left-0 right-0 z-20 pt-3 pb-14 px-3 sm:px-4 bg-gradient-to-b from-black/70 via-black/30 to-transparent pointer-events-none">
+                <div className="h-1 bg-white/20 rounded-full overflow-hidden mb-3">
                   <div className="h-full bg-white/90 w-full" />
                 </div>
-              </div>
-
-              {/* Top bar — author avatar / name / time / X */}
-              <div className="absolute top-0 left-0 right-0 z-20 flex items-center gap-3 px-4 pt-6 pb-4 bg-gradient-to-b from-black/70 to-transparent">
-                <Avatar className="h-9 w-9 ring-2 ring-white/20">
-                  <AvatarImage src={viewingStory.authorAvatar || (isOwn ? user?.avatarUrl : "")} />
-                  <AvatarFallback className="bg-gradient-to-br from-teal-400 to-emerald-500 text-white font-bold text-sm">
-                    {initial}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white truncate">
-                    {isOwn ? "Your Story" : (viewingStory.authorName || `User ${String(viewingStory.authorId || "").slice(-6)}`)}
-                  </p>
-                  {timeAgo && <p className="text-[11px] text-white/70 font-medium">{timeAgo} ago</p>}
-                </div>
-                {isOwn && (
+                <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto">
+                  <Avatar className="h-9 w-9 ring-2 ring-white/30 flex-shrink-0">
+                    <AvatarImage src={viewingStory.authorAvatar || (isOwn ? user?.avatarUrl : "")} />
+                    <AvatarFallback className="bg-gradient-to-br from-teal-400 to-emerald-500 text-white font-bold text-sm">
+                      {initial}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-white truncate drop-shadow">
+                      {isOwn ? "Your Story" : (viewingStory.authorName || `User ${String(viewingStory.authorId || "").slice(-6)}`)}
+                    </p>
+                    {timeAgo && (
+                      <p className="text-[11px] text-white/80 font-medium drop-shadow">
+                        {timeAgo} ago
+                      </p>
+                    )}
+                  </div>
+                  {isOwn && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm("Delete this story?")) return;
+                        try {
+                          await deleteStatus.mutateAsync(viewingStory._id);
+                          setViewingStory(null);
+                        } catch (_) { /* toast handled in hook */ }
+                      }}
+                      className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 text-white flex items-center justify-center transition-colors flex-shrink-0"
+                      aria-label="Delete story"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (!confirm("Delete this story?")) return;
-                      try {
-                        await deleteStatus.mutateAsync(viewingStory._id);
-                        setViewingStory(null);
-                      } catch (_) { /* toast handled in hook */ }
-                    }}
-                    className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
-                    aria-label="Delete story"
+                    onClick={() => setViewingStory(null)}
+                    className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 text-white flex items-center justify-center transition-colors flex-shrink-0"
+                    aria-label="Close"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <X className="h-4 w-4" />
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setViewingStory(null)}
-                  className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                </div>
               </div>
 
-              {/* Media — object-contain so the whole image is visible
-                  (no awkward crop on horizontal/square photos). The dark
-                  bg fills any letterbox. */}
-              <div className="flex-1 relative flex items-center justify-center">
-                {viewingStory.mediaUrl ? (
-                  <img
-                    src={viewingStory.mediaUrl}
-                    alt="Story media"
-                    className="max-w-full max-h-full object-contain select-none"
-                    draggable={false}
-                  />
-                ) : (
-                  // Text-only story — gradient backdrop so it's not a
-                  // featureless dark box.
-                  <div className="absolute inset-0 bg-gradient-to-br from-teal-600 via-emerald-600 to-cyan-700" />
-                )}
-              </div>
-
-              {/* Caption — only renders the strip when there's text, with
-                  a proper bottom-only gradient (no whole-card overlay). */}
+              {/* Layer 3 — bottom caption with its own gradient. Renders
+                  only when the story has text. The pt-16 sets up a long
+                  fade-in from transparent to opaque so the caption strip
+                  doesn't end abruptly. */}
               {viewingStory.content && (
-                <div className="absolute bottom-0 left-0 right-0 z-20 pt-12 pb-6 px-5 bg-gradient-to-t from-black/85 to-transparent">
-                  <p className="text-base font-medium text-white leading-snug whitespace-pre-wrap text-center max-w-md mx-auto">
+                <div className="absolute bottom-0 left-0 right-0 z-20 pt-16 pb-6 px-5 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none">
+                  <p className="text-base font-medium text-white leading-snug whitespace-pre-wrap text-center max-w-md mx-auto drop-shadow">
                     {viewingStory.content}
                   </p>
                 </div>
