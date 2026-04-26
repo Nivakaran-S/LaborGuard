@@ -28,10 +28,13 @@ jest.mock('../../src/middleware/imageModeration', () => ({
     moderateImages: (req, _res, next) => next(),
 }));
 
-// Skip content moderation — pass through
-jest.mock('../../src/middleware/contentModeration', () => ({
-    moderateContent: (req, _res, next) => next(),
+// Mock Perspective API at the source rather than bypassing the whole
+// middleware — that way tests can flip a single user's content to "toxic"
+// to verify the moderation chain actually runs on comment writes.
+jest.mock('../../src/utils/perspectiveApi', () => ({
+    analyzeText: jest.fn().mockResolvedValue({ isToxic: false, score: 0 }),
 }));
+const { analyzeText } = require('../../src/utils/perspectiveApi');
 
 // Mock cross-service eventing
 jest.mock('../../src/utils/kafkaProducer', () => ({
@@ -296,5 +299,68 @@ describe('Internal events guard (/api/internal/events/:topic)', () => {
                 },
             });
         expect([200, 202]).toContain(res.status);
+    });
+});
+
+describe('Comment content moderation', () => {
+    /**
+     * Pin down the wiring fix: comment create + edit must run text through
+     * the Perspective-API moderation middleware, the same way posts do. Before
+     * commentRoutes.js was wired with `moderateContent`, a toxic comment would
+     * land in the DB unfiltered.
+     */
+    let postId;
+    beforeEach(async () => {
+        analyzeText.mockReset();
+        analyzeText.mockResolvedValue({ isToxic: false, score: 0 });
+        const post = await Post.create({ authorId: newId(), content: 'parent post' });
+        postId = post._id;
+    });
+
+    it('lets a clean comment through (analyzeText returned non-toxic)', async () => {
+        const res = await request(app)
+            .post(`/api/comments/${postId}`)
+            .set(auth(signToken({ userId: newId() })))
+            .send({ content: 'thanks for sharing this' });
+        expect(res.status).toBe(201);
+        expect(analyzeText).toHaveBeenCalledWith('thanks for sharing this');
+    });
+
+    it('rejects a comment that Perspective flags toxic with 403', async () => {
+        analyzeText.mockResolvedValueOnce({ isToxic: true, score: 0.95 });
+
+        const res = await request(app)
+            .post(`/api/comments/${postId}`)
+            .set(auth(signToken({ userId: newId() })))
+            .send({ content: '[would be toxic in real life]' });
+
+        expect(res.status).toBe(403);
+        expect(res.body).toMatchObject({
+            message: expect.stringMatching(/toxic/i),
+            toxicityScore: 0.95,
+        });
+    });
+
+    it('runs moderation on PATCH (edit) too', async () => {
+        // Seed a clean comment first by going through the route, then edit it
+        // with toxic content and confirm the edit is rejected.
+        const Comment = require('../../src/models/Comment');
+        const author = newId();
+        const seeded = await Comment.create({
+            postId,
+            authorId: author,
+            content: 'original clean text',
+        });
+
+        analyzeText.mockResolvedValueOnce({ isToxic: true, score: 0.91 });
+        const res = await request(app)
+            .patch(`/api/comments/${seeded._id}`)
+            .set(auth(signToken({ userId: author })))
+            .send({ content: 'edit attempt with toxic payload' });
+
+        expect(res.status).toBe(403);
+        // The original content should remain unchanged in the DB
+        const fresh = await Comment.findById(seeded._id);
+        expect(fresh.content).toBe('original clean text');
     });
 });
