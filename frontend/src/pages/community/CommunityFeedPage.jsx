@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, TrendingUp, Users, Bookmark, Hash, Compass } from "lucide-react";
+import { Search, TrendingUp, Users, Bookmark, Hash, Compass, X, Trash2 } from "lucide-react";
 import { useCommunity } from "@/hooks/useCommunity";
 import { useAuth } from "@/hooks/useAuth";
 import { StoriesBar } from "@/components/community/StoriesBar";
@@ -9,6 +9,8 @@ import { PostComposer } from "@/components/community/PostComposer";
 import { PostSkeleton } from "@/components/community/PostSkeleton";
 import { CommentThread } from "@/components/community/CommentThread";
 import { StoryComposerModal } from "@/components/community/StoryComposerModal";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/common/Avatar";
+import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -32,6 +34,7 @@ const CommunityFeedPage = () => {
   const {
     useGetPosts, useGetTrending, useSearchByHashtag,
     likePost, sharePost, toggleBookmark, deletePost, reportPost, votePoll,
+    deleteStatus,
   } = useCommunity();
   const [storyComposerOpen, setStoryComposerOpen] = useState(false);
 
@@ -216,23 +219,103 @@ const CommunityFeedPage = () => {
         onClose={() => setStoryComposerOpen(false)}
       />
 
-      {/* ── Story Viewer (basic overlay) ───────────────────────── */}
-      {viewingStory && (
-        <div
-          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center animate-in fade-in"
-          onClick={() => setViewingStory(null)}
-        >
-          <div className="max-w-sm w-full mx-4 rounded-3xl overflow-hidden bg-slate-900 aspect-[9/16] relative flex items-end">
-            {viewingStory.mediaUrl && (
-              <img src={viewingStory.mediaUrl} alt="Story" className="absolute inset-0 w-full h-full object-cover" />
-            )}
-            <div className="relative z-10 p-6 bg-gradient-to-t from-black/80 via-transparent">
-              <p className="text-sm font-bold text-white">{viewingStory.content}</p>
-              <p className="text-xs text-white/60 mt-1">{viewingStory.authorName}</p>
+      {/* ── Story Viewer (Instagram-style) ─────────────────────── */}
+      {viewingStory && (() => {
+        const isOwn = viewingStory.authorId === user?.userId;
+        const initial = (viewingStory.authorName || user?.firstName || "?").charAt(0).toUpperCase();
+        const timeAgo = viewingStory.createdAt
+          ? formatDistanceToNow(new Date(viewingStory.createdAt), { addSuffix: false })
+          : "";
+
+        return (
+          <div
+            className="fixed inset-0 bg-black z-50 flex items-center justify-center animate-in fade-in"
+            onClick={() => setViewingStory(null)}
+          >
+            {/* Story card — stops backdrop click; only X / outside dismiss */}
+            <div
+              className="relative w-full max-w-[420px] h-full sm:h-[92vh] sm:rounded-3xl overflow-hidden bg-slate-950 flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Progress bar (single segment for now — per-author segments
+                  would land here when we add multi-story authors) */}
+              <div className="absolute top-0 left-0 right-0 z-30 px-3 pt-3 pointer-events-none">
+                <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+                  <div className="h-full bg-white/90 w-full" />
+                </div>
+              </div>
+
+              {/* Top bar — author avatar / name / time / X */}
+              <div className="absolute top-0 left-0 right-0 z-20 flex items-center gap-3 px-4 pt-6 pb-4 bg-gradient-to-b from-black/70 to-transparent">
+                <Avatar className="h-9 w-9 ring-2 ring-white/20">
+                  <AvatarImage src={viewingStory.authorAvatar || (isOwn ? user?.avatarUrl : "")} />
+                  <AvatarFallback className="bg-gradient-to-br from-teal-400 to-emerald-500 text-white font-bold text-sm">
+                    {initial}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-white truncate">
+                    {isOwn ? "Your Story" : (viewingStory.authorName || `User ${String(viewingStory.authorId || "").slice(-6)}`)}
+                  </p>
+                  {timeAgo && <p className="text-[11px] text-white/70 font-medium">{timeAgo} ago</p>}
+                </div>
+                {isOwn && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm("Delete this story?")) return;
+                      try {
+                        await deleteStatus.mutateAsync(viewingStory._id);
+                        setViewingStory(null);
+                      } catch (_) { /* toast handled in hook */ }
+                    }}
+                    className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+                    aria-label="Delete story"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setViewingStory(null)}
+                  className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Media — object-contain so the whole image is visible
+                  (no awkward crop on horizontal/square photos). The dark
+                  bg fills any letterbox. */}
+              <div className="flex-1 relative flex items-center justify-center">
+                {viewingStory.mediaUrl ? (
+                  <img
+                    src={viewingStory.mediaUrl}
+                    alt="Story media"
+                    className="max-w-full max-h-full object-contain select-none"
+                    draggable={false}
+                  />
+                ) : (
+                  // Text-only story — gradient backdrop so it's not a
+                  // featureless dark box.
+                  <div className="absolute inset-0 bg-gradient-to-br from-teal-600 via-emerald-600 to-cyan-700" />
+                )}
+              </div>
+
+              {/* Caption — only renders the strip when there's text, with
+                  a proper bottom-only gradient (no whole-card overlay). */}
+              {viewingStory.content && (
+                <div className="absolute bottom-0 left-0 right-0 z-20 pt-12 pb-6 px-5 bg-gradient-to-t from-black/85 to-transparent">
+                  <p className="text-base font-medium text-white leading-snug whitespace-pre-wrap text-center max-w-md mx-auto">
+                    {viewingStory.content}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
