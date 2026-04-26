@@ -2,6 +2,7 @@ const Appointment = require('../models/Appointment');
 const Complaint = require('../models/Complaint');
 const LegalOfficerRegistry = require('../models/LegalOfficerRegistry');
 const { sendAppointmentConfirmationEmail, sendAppointmentNotificationToOfficer } = require('./emailService');
+const { emitEvent } = require('../utils/kafkaProducer');
 
 // ─────────────────────────────────────────────
 // Category → Specialization Mapping
@@ -57,25 +58,70 @@ const assignLegalOfficer = async (specialization) => {
   return officers[0];
 };
 
+// Business-hour helpers used by getNextAvailableSlot.
+const BUSINESS_START_HOUR = 9;
+const BUSINESS_END_HOUR   = 17;            // last meeting starts at 16:00, ends 17:00
+const SLOT_HOURS          = 1;             // book in 1-hour grid slots
+
+const skipWeekend = (d) => {
+  // 0 = Sunday, 6 = Saturday
+  while (d.getDay() === 0 || d.getDay() === 6) {
+    d.setDate(d.getDate() + 1);
+  }
+};
+
 /**
- * Calculate next available appointment slot
- * Schedules for next working day at 9AM
+ * Next available appointment slot for a specific officer.
+ *
+ * Walks forward in 1-hour increments from "tomorrow at 9 AM", skipping
+ * weekends and any slot the officer already has booked (auto_booked /
+ * confirmed only — cancelled / completed don't block). Without this
+ * collision check, every auto-appointment created in the same minute would
+ * land at the same 9 AM tomorrow slot for the same officer, which is
+ * obviously unrunnable.
+ *
+ * Async because we hit Mongo for the officer's existing reservations.
  */
-const getNextAvailableSlot = () => {
-  const now = new Date();
-  const next = new Date(now);
+const getNextAvailableSlot = async (officerId = null) => {
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  skipWeekend(start);
+  start.setHours(BUSINESS_START_HOUR, 0, 0, 0);
 
-  // Move to next day
-  next.setDate(next.getDate() + 1);
+  // No officer context (e.g. worker-requested appointment with no assigned
+  // officer yet) → return the first 9 AM slot. Admin resolves collisions
+  // on confirm.
+  if (!officerId) return start;
 
-  // Skip weekends
-  if (next.getDay() === 6) next.setDate(next.getDate() + 2); // Saturday → Monday
-  if (next.getDay() === 0) next.setDate(next.getDate() + 1); // Sunday → Monday
+  const horizon = new Date(start);
+  horizon.setDate(horizon.getDate() + 21);
 
-  // Set time to 9:00 AM
-  next.setHours(9, 0, 0, 0);
+  const taken = await Appointment.find(
+    {
+      legalOfficerId: officerId,
+      status: { $in: ['auto_booked', 'confirmed'] },
+      scheduledAt: { $gte: start, $lte: horizon },
+    },
+    { scheduledAt: 1 }
+  ).lean();
 
-  return next;
+  const takenStamps = new Set(taken.map((a) => new Date(a.scheduledAt).getTime()));
+
+  const cursor = new Date(start);
+  // Bound the search — 14 working days × 8 slots/day = 112 candidates.
+  for (let i = 0; i < 200; i += 1) {
+    if (!takenStamps.has(cursor.getTime())) return new Date(cursor);
+
+    cursor.setHours(cursor.getHours() + SLOT_HOURS);
+    if (cursor.getHours() >= BUSINESS_END_HOUR) {
+      cursor.setDate(cursor.getDate() + 1);
+      skipWeekend(cursor);
+      cursor.setHours(BUSINESS_START_HOUR, 0, 0, 0);
+    }
+  }
+  // Fallback — every slot in the horizon is taken. Land on the first slot
+  // anyway; admin can reschedule.
+  return start;
 };
 
 /**
@@ -87,7 +133,7 @@ const autoCreateAppointment = async (complaint, adminUser) => {
 
   // Pick the best available legal officer via round robin
   const officer = await assignLegalOfficer(specialization);
-  const scheduledAt = getNextAvailableSlot();
+  const scheduledAt = await getNextAvailableSlot(officer.officerId);
 
   const appointment = await Appointment.create({
     complaintId: complaint._id,
@@ -121,6 +167,21 @@ const autoCreateAppointment = async (complaint, adminUser) => {
 
   sendAppointmentNotificationToOfficer(complaint, appointment, officer).catch((err) =>
     console.error('[appointmentService] Officer email failed:', err.message)
+  );
+
+  // Fire an in-app notification event for both worker and officer. Without
+  // this, no bell badge ever lights up on auto-booking — only emails fire,
+  // and emails depend on the Resend domain being verified.
+  emitEvent('complaint-events', 'appointment_auto_booked', {
+    appointmentId: appointment._id,
+    complaintId  : complaint._id,
+    workerId     : complaint.workerId,
+    officerId    : officer.officerId,
+    title        : complaint.title,
+    scheduledAt  : appointment.scheduledAt,
+    category     : complaint.category,
+  }).catch((err) =>
+    console.error('[appointmentService] event emit failed:', err.message)
   );
 
   return appointment;
@@ -239,7 +300,11 @@ const getAppointmentById = async (appointmentId, user) => {
   }
 
   const isWorkerOwner = appointment.workerId.toString() === user.userId;
-  const isAssignedOfficer = appointment.legalOfficerId.toString() === user.userId;
+  // legalOfficerId can be null for `requested` appointments awaiting admin
+  // confirmation — guard before calling toString().
+  const isAssignedOfficer =
+    appointment.legalOfficerId != null &&
+    appointment.legalOfficerId.toString() === user.userId;
   const isAdmin = user.role === 'admin';
 
   if (!isWorkerOwner && !isAssignedOfficer && !isAdmin) {
@@ -252,9 +317,18 @@ const getAppointmentById = async (appointmentId, user) => {
 };
 
 /**
- * Confirm an appointment — admin only
+ * Confirm an appointment — admin only.
+ *
+ * Accepts either an `auto_booked` appointment (no extra fields needed) or a
+ * worker-`requested` appointment (admin must supply `legalOfficerId` since
+ * requested appointments don't carry one yet — see Appointment.legalOfficerId
+ * conditional validator).
  */
-const confirmAppointment = async (appointmentId, { meetingDetails, notes }, user) => {
+const confirmAppointment = async (
+  appointmentId,
+  { meetingDetails, notes, legalOfficerId },
+  user
+) => {
   const appointment = await Appointment.findById(appointmentId);
 
   if (!appointment) {
@@ -263,10 +337,24 @@ const confirmAppointment = async (appointmentId, { meetingDetails, notes }, user
     throw error;
   }
 
-  if (appointment.status !== 'auto_booked') {
-    const error = new Error('Only auto_booked appointments can be confirmed');
+  if (!['auto_booked', 'requested'].includes(appointment.status)) {
+    const error = new Error('Only auto_booked or requested appointments can be confirmed');
     error.statusCode = 400;
     throw error;
+  }
+
+  if (appointment.status === 'requested') {
+    if (!legalOfficerId) {
+      const error = new Error('legalOfficerId is required when confirming a requested appointment');
+      error.statusCode = 400;
+      throw error;
+    }
+    appointment.legalOfficerId = legalOfficerId;
+    // Bump the registry counters now that this officer is actually committed.
+    await LegalOfficerRegistry.findOneAndUpdate(
+      { officerId: legalOfficerId },
+      { $inc: { totalAssigned: 1, activeAppointmentCount: 1 }, lastAssignedAt: new Date() }
+    );
   }
 
   appointment.status = 'confirmed';
@@ -406,14 +494,21 @@ const requestAppointment = async ({ complaintId, preferredDate, reason }, user) 
     discrimination: 'discrimination_law',
   }[complaint.category] || 'labor_law';
 
-  const scheduledAt = preferredDate ? new Date(preferredDate) : getNextAvailableSlot();
+  // If admin already linked an officer to the complaint, honour that for
+  // collision-aware slot picking. Otherwise the slot picker returns the
+  // first 9 AM and admin reschedules at confirm time.
+  const presetOfficer = complaint.assignedTo || null;
+  const scheduledAt = preferredDate
+    ? new Date(preferredDate)
+    : await getNextAvailableSlot(presetOfficer);
 
   const appointment = await Appointment.create({
     complaintId: complaint._id,
     workerId: complaint.workerId,
-    // Placeholder officer — admin will reassign on confirm. Temporarily use the
-    // complaint's assignedTo if any, else the worker's own id (admin will change).
-    legalOfficerId: complaint.assignedTo || complaint.workerId,
+    // Was: complaint.assignedTo || complaint.workerId — using the worker's
+    // own id as a fake officer is semantically wrong and pollutes the
+    // lawyer's "assigned cases" view. Now nullable for `requested` status.
+    legalOfficerId: presetOfficer,
     category: ['wage_theft', 'wrongful_termination', 'harassment', 'discrimination']
       .includes(complaint.category) ? complaint.category : 'wage_theft',
     specialization,
@@ -422,6 +517,18 @@ const requestAppointment = async ({ complaintId, preferredDate, reason }, user) 
     meetingType: 'online',
     notes: reason ? `Worker-requested: ${reason}` : 'Worker-requested appointment'
   });
+
+  // Tell admin a request needs confirmation. Fire-and-forget so a
+  // notification-service blip doesn't break the worker's request flow.
+  emitEvent('complaint-events', 'appointment_requested', {
+    appointmentId: appointment._id,
+    complaintId  : complaint._id,
+    workerId     : complaint.workerId,
+    title        : complaint.title,
+    scheduledAt  : appointment.scheduledAt,
+  }).catch((err) =>
+    console.error('[appointmentService] event emit failed:', err.message)
+  );
 
   return appointment;
 };

@@ -287,6 +287,38 @@ const handleComplaintEvents = async (event) => {
             bodyHtml: `You've been assigned to case "<strong>${title}</strong>". Review the details and begin your work.`,
             cta: { label: 'Open Case', href: `${APP_URL}/legal/cases/${complaintId}` },
         });
+    } else if (event.type === 'appointment_auto_booked') {
+        // Auto-booking via "Update Status → under_review" used to only send
+        // emails. This handler adds the in-app notification path so both the
+        // worker and the assigned officer get a bell badge.
+        const { appointmentId, complaintId, workerId, officerId, title, scheduledAt } = event.payload;
+        const when = scheduledAt ? new Date(scheduledAt).toLocaleString() : '';
+        await createIfAllowed('complaint_status', {
+            userId: workerId, type: 'system', category: 'complaint', title: 'Appointment Booked',
+            body: `An appointment has been auto-booked for your case '${title}'${when ? ` on ${when}` : ''}.`,
+            relatedId: appointmentId,
+        }, {
+            subject: `Appointment booked for '${title}'`,
+            bodyHtml: `An appointment has been booked for your case "<strong>${title}</strong>"${when ? ` on <strong>${when}</strong>` : ''}.`,
+            cta: { label: 'View Appointment', href: `${APP_URL}/worker/appointments` },
+        });
+        await createIfAllowed('complaint_status', {
+            userId: officerId, type: 'system', category: 'complaint', title: 'New Case Assignment',
+            body: `Auto-assigned to case '${title}'${when ? `; appointment on ${when}` : ''}.`,
+            relatedId: complaintId,
+        }, {
+            subject: `New case assigned: ${title}`,
+            bodyHtml: `You've been auto-assigned to case "<strong>${title}</strong>"${when ? ` with an appointment on <strong>${when}</strong>` : ''}.`,
+            cta: { label: 'Open Case', href: `${APP_URL}/legal/cases/${complaintId}` },
+        });
+    } else if (event.type === 'appointment_requested') {
+        // Worker requested a manual appointment. Admin needs to know so they
+        // can confirm it (and assign an officer at confirm time). No
+        // role-based fanout exists yet, so for now we leave the in-app
+        // notification empty and rely on admin checking the appointments
+        // page filter; logged for visibility.
+        const { complaintId, title, workerId } = event.payload;
+        console.log(`[${SERVICE_NAME}] appointment_requested for complaint ${complaintId} (${title}) by worker ${workerId}`);
     }
     // complaint_shared_to_community is consumed by community-service, not here.
 };

@@ -43,11 +43,23 @@ const appointmentSchema = new mongoose.Schema(
       ref: 'User'
     },
 
-    // The legal officer assigned via round robin + specialization
+    // The legal officer assigned via round robin + specialization.
+    // Allowed to be null when the appointment is in `requested` state — a
+    // worker can request an appointment before any officer is assigned, and
+    // admin will fill this in when they confirm. Required for every other
+    // status so we never have a confirmed/booked appointment without an
+    // officer.
     legalOfficerId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: [true, 'Legal officer ID is required'],
-      ref: 'User'
+      ref: 'User',
+      default: null,
+      validate: {
+        validator: function (v) {
+          if (this.status === 'requested') return true;
+          return v != null;
+        },
+        message: 'Legal officer ID is required for non-requested appointments',
+      },
     },
 
     // Complaint category that triggered the booking

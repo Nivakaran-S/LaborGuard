@@ -492,3 +492,120 @@ describe('Share-to-community', () => {
         expect(res.status).toBe(403);
     });
 });
+
+describe('Appointment creation correctness', () => {
+    /**
+     * Pin down the three appointment-service fixes:
+     *   1. getNextAvailableSlot doesn't pile every auto-appointment into the
+     *      same 9 AM slot — it walks forward when the officer is busy.
+     *   2. autoCreateAppointment emits an appointment_auto_booked event so
+     *      the notification-service handler can fire in-app notifications.
+     *   3. requestAppointment uses null for legalOfficerId (not the worker's
+     *      own id) when the complaint has no assigned officer.
+     */
+    const { emitEvent } = require('../../src/utils/kafkaProducer');
+
+    let workerId, adminId, lawyerId;
+    let workerToken, adminToken;
+
+    beforeEach(async () => {
+        workerId = newId();
+        adminId = newId();
+        lawyerId = newId();
+        workerToken = signToken({ userId: workerId, role: 'worker' });
+        adminToken = signToken({ userId: adminId, role: 'admin' });
+        await LegalOfficerRegistry.create({
+            officerId: lawyerId,
+            name: 'Slot Lawyer',
+            email: 'slot@test.com',
+            specializations: ['labor_law'],
+            isActive: true,
+        });
+        if (emitEvent.mockClear) emitEvent.mockClear();
+    });
+
+    const fileEligibleComplaint = async () => {
+        const res = await request(app)
+            .post('/api/complaints')
+            .set(auth(workerToken))
+            .send({
+                title: 'Wage theft case for slot test',
+                description: 'A case eligible for auto-booking so we can stack multiple appointments.',
+                category: 'wage_theft',
+                priority: 'critical',
+            })
+            .expect(201);
+        return res.body.data._id;
+    };
+
+    it('does not pile multiple auto-appointments into the same slot', async () => {
+        // Stack 3 eligible complaints, all auto-routed to the same officer.
+        const ids = [];
+        for (let i = 0; i < 3; i += 1) ids.push(await fileEligibleComplaint());
+
+        for (const id of ids) {
+            await request(app)
+                .patch(`/api/complaints/${id}/status`)
+                .set(auth(adminToken))
+                .send({ status: 'under_review' })
+                .expect(200);
+        }
+        await waitForAppointments(3);
+
+        const apts = await Appointment.find({ legalOfficerId: lawyerId }).sort({ scheduledAt: 1 });
+        expect(apts).toHaveLength(3);
+        const stamps = apts.map((a) => new Date(a.scheduledAt).getTime());
+        // Every appointment lands on a distinct slot.
+        expect(new Set(stamps).size).toBe(3);
+    });
+
+    it('emits appointment_auto_booked when admin moves to under_review', async () => {
+        const id = await fileEligibleComplaint();
+        await request(app)
+            .patch(`/api/complaints/${id}/status`)
+            .set(auth(adminToken))
+            .send({ status: 'under_review' })
+            .expect(200);
+        await waitForAppointments(1);
+
+        const calls = emitEvent.mock.calls.filter(
+            (c) => c[1] === 'appointment_auto_booked'
+        );
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+        const payload = calls[0][2];
+        expect(payload).toMatchObject({
+            workerId,
+            officerId: lawyerId,
+        });
+        expect(payload.appointmentId).toBeDefined();
+        expect(payload.scheduledAt).toBeDefined();
+    });
+
+    it('worker-requested appointment leaves legalOfficerId null (not the workerId)', async () => {
+        // Pre-existing seed-style requested appointment via the model directly
+        // — the route is `/api/appointments/request`, but we want to assert
+        // the schema/save path tolerates null.
+        const complaint = await Complaint.create({
+            title: 'Pending case for request test',
+            description: 'Worker is going to request an appointment before assignment.',
+            category: 'wage_theft',
+            priority: 'medium',  // ineligible for auto-booking
+            status: 'pending',
+            workerId,
+        });
+
+        const res = await request(app)
+            .post('/api/appointments/request')
+            .set(auth(workerToken))
+            .send({ complaintId: complaint._id, reason: 'I need to discuss this case' });
+
+        expect(res.status).toBe(201);
+        expect(res.body.data || res.body).toMatchObject({
+            status: 'requested',
+            workerId: String(workerId),
+        });
+
+        const stored = await Appointment.findById(res.body.data?._id || res.body._id);
+        expect(stored.legalOfficerId).toBeNull();   // ← was workerId before fix
+    });
+});
