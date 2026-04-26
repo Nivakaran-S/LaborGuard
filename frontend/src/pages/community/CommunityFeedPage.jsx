@@ -244,15 +244,10 @@ const CommunityFeedPage = () => {
               className="
                 relative bg-slate-950 overflow-hidden shadow-2xl
                 w-full h-[100dvh]
-                sm:w-auto sm:h-auto sm:max-h-[92vh] sm:aspect-[9/16] sm:rounded-3xl
+                sm:h-auto sm:rounded-3xl
+                sm:w-[min(440px,calc(92vh*9/16))]
+                sm:aspect-[9/16] sm:max-h-[92vh]
               "
-              style={{
-                // Cap the width on tablet/desktop so a tall 92vh × 9:16 card
-                // (which would be ~518px wide on a 1080px viewport) doesn't
-                // dominate. Falls back to default sm:aspect sizing on smaller
-                // screens.
-                maxWidth: 'min(440px, 100vw)',
-              }}
             >
               {/* Layer 1 — full-bleed media or text-only gradient backdrop.
                   Uses object-cover for media (the natural story format is
